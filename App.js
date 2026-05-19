@@ -1,20 +1,509 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  Dimensions,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function App() {
+const { width } = Dimensions.get('window');
+const GRID_ITEM_SIZE = (width - 48) / 2;
+
+const C = {
+  // Page
+  bg: '#F5F0E8',
+  // Navbar / text
+  navy: '#0A1628',
+  navyMid: '#0F2044',
+  navyLight: '#1A3A6E',
+  navyAlpha60: 'rgba(10,22,40,0.6)',
+  navyAlpha30: 'rgba(10,22,40,0.3)',
+  navyAlpha12: 'rgba(10,22,40,0.12)',
+  navyAlpha06: 'rgba(10,22,40,0.06)',
+  // Accent (used inside dark card only)
+  accent: '#00A8E8',
+  accentGlow: '#0074C8',
+  accentSoft: '#1BBFFF',
+  // Grid cards
+  cardBg: '#FFFFFF',
+  cardBorder: 'rgba(10,22,40,0.08)',
+  // Misc
+  gold: '#F5A623',
+  white: '#FFFFFF',
+  // White-on-dark aliases (workout card interior)
+  w80: 'rgba(255,255,255,0.8)',
+  w50: 'rgba(255,255,255,0.5)',
+  w20: 'rgba(255,255,255,0.2)',
+  w08: 'rgba(255,255,255,0.08)',
+};
+
+const GRID_ACCENT = {
+  plan:     '#00A8E8',
+  times:    '#00A8E8',
+  strength: '#00A8E8',
+  profile:  '#00A8E8',
+};
+
+const todaysWorkout = {
+  title: 'Threshold Builder',
+  subtitle: 'Tuesday · Main Set',
+  duration: '58 min',
+  distance: '4,200m',
+  intensity: 'Threshold',
+  sets: [
+    { label: 'Warm-up',   detail: '400m easy FR + 4×50m drill' },
+    { label: 'Pre-set',   detail: '6×100m @ CSS +5s, :20 rest' },
+    { label: 'Main set',  detail: '3×(4×200m) @ CSS, :30/:90 rest' },
+    { label: 'Cool-down', detail: '300m easy choice' },
+  ],
+};
+
+const gridItems = [
+  { id: 'plan',     label: 'Training Plan',       sub: '12-week base',     icon: 'calendar-outline' },
+  { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline' },
+  { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',   icon: 'body-outline' },
+  { id: 'profile', label: 'Profile',              sub: 'Jessica · Lane 4', icon: 'person-circle-outline' },
+];
+
+function IntensityBadge({ label }) {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
 }
 
+function StatPill({ icon, value, label }) {
+  return (
+    <View style={styles.statPill}>
+      <Ionicons name={icon} size={14} color={C.accent} />
+      <View>
+        <Text style={styles.statValue}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
+function WorkoutCard({ workout }) {
+  return (
+    <TouchableOpacity activeOpacity={0.9} style={styles.workoutCardWrapper}>
+      <LinearGradient
+        colors={['#0F2A5A', '#0A1A3C', '#07101F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.workoutCard}
+      >
+        {/* Subtle pool lane lines */}
+        <View style={styles.laneLineContainer} pointerEvents="none">
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[styles.laneLine, { top: 28 + i * 22, opacity: 0.06 + i * 0.02 }]} />
+          ))}
+        </View>
+        {/* Glow bloom */}
+        <View style={styles.glowBlob} pointerEvents="none" />
+
+        {/* Header */}
+        <View style={styles.workoutHeader}>
+          <View style={styles.workoutTitleBlock}>
+            <Text style={styles.workoutSub}>{workout.subtitle}</Text>
+            <Text style={styles.workoutTitle}>{workout.title}</Text>
+          </View>
+          <IntensityBadge label={workout.intensity} />
+        </View>
+
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          <StatPill icon="time-outline"  value={workout.duration} label="Duration" />
+          <View style={styles.statDivider} />
+          <StatPill icon="water-outline" value={workout.distance} label="Distance" />
+        </View>
+
+        {/* Sets preview */}
+        <View style={styles.setsContainer}>
+          {workout.sets.map((set, idx) => (
+            <View key={idx} style={styles.setRow}>
+              <View style={styles.setDot} />
+              <Text style={styles.setLabel}>{set.label}</Text>
+              <Text style={styles.setDetail} numberOfLines={1}>{set.detail}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* CTA */}
+        <TouchableOpacity activeOpacity={0.85} style={styles.startBtn}>
+          <LinearGradient
+            colors={[C.accent, C.accentGlow]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.startBtnGradient}
+          >
+            <Ionicons name="play" size={14} color="#fff" />
+            <Text style={styles.startBtnText}>Start Workout</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+}
+
+function GridItem({ item }) {
+  const accent = GRID_ACCENT[item.id];
+  return (
+    <TouchableOpacity activeOpacity={0.82} style={styles.gridItemWrapper}>
+      <View style={styles.gridItem}>
+        {/* Top accent bar */}
+        <View style={[styles.gridAccentBar, { backgroundColor: accent }]} />
+
+        {/* Icon */}
+        <View style={[styles.gridIconCircle, { backgroundColor: accent + '14', borderColor: accent + '30' }]}>
+          <Ionicons name={item.icon} size={24} color={accent} />
+        </View>
+
+        <Text style={styles.gridLabel}>{item.label}</Text>
+        <Text style={styles.gridSub}>{item.sub}</Text>
+
+        <View style={styles.gridArrow}>
+          <Ionicons name="chevron-forward" size={14} color={C.navyAlpha30} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export default function App() {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Navbar */}
+        <View style={styles.navbar}>
+          <View>
+            <Text style={styles.appName}>SWIMMY</Text>
+            <Text style={styles.navDate}>{today}</Text>
+          </View>
+          <TouchableOpacity style={styles.notifBtn}>
+            <Ionicons name="notifications-outline" size={22} color={C.navy} />
+            <View style={styles.notifDot} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Section label — Today's Workout */}
+        <View style={styles.sectionHeader}>
+          <View style={[styles.sectionPip, { backgroundColor: C.accent }]} />
+          <Text style={styles.sectionTitle}>Today's Workout</Text>
+        </View>
+
+        <WorkoutCard workout={todaysWorkout} />
+
+        {/* Grid — no section label */}
+        <View style={[styles.grid, { marginTop: 20 }]}>
+          {gridItems.map((item) => (
+            <GridItem key={item.id} item={item} />
+          ))}
+        </View>
+
+        <View style={styles.bottomPad} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: C.bg,
+  },
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+
+  // Navbar
+  navbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  appName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: C.navy,
+    letterSpacing: 4,
+  },
+  navDate: {
+    fontSize: 12,
+    color: C.navyAlpha60,
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  notifBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.navyAlpha06,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  notifDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.accent,
+    borderWidth: 1.5,
+    borderColor: C.bg,
+  },
+
+  // Section header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionPip: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+    marginRight: 8,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.navyAlpha60,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+
+  // ── Workout card (stays dark) ──────────────────────────
+  workoutCardWrapper: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: C.navyMid,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    elevation: 12,
+  },
+  workoutCard: {
+    padding: 22,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  laneLineContainer: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0, bottom: 0,
+  },
+  laneLine: {
+    position: 'absolute',
+    left: -10, right: -10,
+    height: 1,
+    backgroundColor: C.accent,
+  },
+  glowBlob: {
+    position: 'absolute',
+    right: -40, top: -40,
+    width: 160, height: 160,
+    borderRadius: 80,
+    backgroundColor: C.accent,
+    opacity: 0.06,
+  },
+  workoutHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  workoutTitleBlock: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  workoutSub: {
+    fontSize: 11,
+    color: C.w50,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  workoutTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: C.white,
+    letterSpacing: -0.3,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,168,232,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,168,232,0.4)',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.accentSoft,
+    letterSpacing: 0.5,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: C.w08,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.white,
+    lineHeight: 20,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: C.w50,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: C.w20,
+    marginHorizontal: 20,
+  },
+  setsContainer: {
+    marginBottom: 20,
+    gap: 9,
+  },
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  setDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: C.accent,
+    opacity: 0.7,
+  },
+  setLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.w80,
+    width: 72,
+    flexShrink: 0,
+  },
+  setDetail: {
+    fontSize: 12,
+    color: C.w50,
+    flex: 1,
+  },
+  startBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  startBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    gap: 8,
+    borderRadius: 12,
+  },
+  startBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.white,
+    letterSpacing: 0.5,
+  },
+
+  // ── Grid (light cards) ─────────────────────────────────
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  gridItemWrapper: {
+    width: GRID_ITEM_SIZE,
+    height: GRID_ITEM_SIZE,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: C.cardBg,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    shadowColor: C.navy,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  gridItem: {
+    flex: 1,
+    padding: 18,
+    justifyContent: 'flex-end',
+  },
+  gridAccentBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+  },
+  gridIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 'auto',
+    marginTop: 20,
+  },
+  gridLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#042C53',
+    lineHeight: 19,
+    marginBottom: 3,
+  },
+  gridSub: {
+    fontSize: 11,
+    color: 'rgba(4,44,83,0.6)',
+    letterSpacing: 0.2,
+  },
+  gridArrow: {
+    position: 'absolute',
+    bottom: 14,
+    right: 14,
+  },
+
+  bottomPad: { height: 32 },
 });
