@@ -2,10 +2,11 @@ import { useState } from 'react';
 import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoadingScreen from './screens/LoadingScreen';
+import TrainingPlanScreen from './screens/TrainingPlanScreen';
 import { generatePlan } from './services/generatePlan';
 
 export default function App() {
-  const [status, setStatus] = useState('onboarding'); // 'onboarding' | 'loading' | 'home'
+  const [status, setStatus] = useState('onboarding'); // 'onboarding' | 'loading' | 'home' | 'plan'
   const [profile, setProfile] = useState(null);
   const [plan, setPlan] = useState(null);
 
@@ -29,5 +30,15 @@ export default function App() {
     return <LoadingScreen />;
   }
 
-  return <HomeScreen profile={profile} plan={plan} />;
+  if (status === 'plan') {
+    return <TrainingPlanScreen plan={plan} onBack={() => setStatus('home')} />;
+  }
+
+  return (
+    <HomeScreen
+      profile={profile}
+      plan={plan}
+      onOpenPlan={() => setStatus('plan')}
+    />
+  );
 }

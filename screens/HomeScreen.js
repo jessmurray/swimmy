@@ -160,7 +160,7 @@ function WorkoutCard({ workout }) {
 
 function GridItem({ item }) {
   return (
-    <TouchableOpacity activeOpacity={0.82} style={styles.gridItemWrapper}>
+    <TouchableOpacity activeOpacity={0.82} style={styles.gridItemWrapper} onPress={item.onPress}>
       <View style={styles.gridItem}>
         <View style={[styles.gridAccentBar, { backgroundColor: GRID_ACCENT }]} />
         <View style={[styles.gridIconCircle, { backgroundColor: GRID_ACCENT + '14', borderColor: GRID_ACCENT + '30' }]}>
@@ -176,7 +176,7 @@ function GridItem({ item }) {
   );
 }
 
-export default function HomeScreen({ profile, plan }) {
+export default function HomeScreen({ profile, plan, onOpenPlan }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -184,7 +184,7 @@ export default function HomeScreen({ profile, plan }) {
   const workout = getTodaysWorkout(plan) || todaysWorkout;
 
   const gridItems = [
-    { id: 'plan',     label: 'Training Plan',       sub: '12-week base',       icon: 'calendar-outline' },
+    { id: 'plan',     label: 'Training Plan',       sub: '12-week base',       icon: 'calendar-outline', onPress: onOpenPlan },
     { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline' },
     { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',     icon: 'body-outline' },
     { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline' },

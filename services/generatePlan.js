@@ -73,6 +73,7 @@ Required structure:
         {
           "day": "Mon",
           "title": "Easy Aerobic",
+          "category": "Base",
           "intensity": "Easy",
           "distance": "2000m",
           "duration": "40 min",
@@ -91,6 +92,10 @@ Required structure:
 Rules:
 - Include exactly 12 weeks.
 - Sessions must only fall on the swimmer's stated swim days.
+- Each session must include "category": one of "Base", "Build", or "Sharpen":
+  - "Base": aerobic base building, recovery, and technique-focused sessions
+  - "Build": threshold, endurance, stroke-specific, kick/pull, and drill sessions
+  - "Sharpen": speed, anaerobic capacity, and race-pace sessions
 - Use proper swimming notation: e.g. "6×100m @ 1:45, :20 rest" or "4×50m FR kick @2:00".
 - Keep each "detail" string under 55 characters.
 - Progress volume and intensity across 12 weeks; weeks 4, 8, and 12 are recovery weeks.
