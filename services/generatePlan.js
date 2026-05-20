@@ -23,8 +23,8 @@ function formatProfile(answers) {
     ? `${answers.event_date.month}/${answers.event_date.year}`
     : null;
 
-  const strokes = answers.strokes
-    ? Object.entries(answers.strokes)
+  const events = answers.events
+    ? Object.entries(answers.events)
         .filter(([, dists]) => dists.length > 0)
         .map(([stroke, dists]) => `${stroke}: ${dists.join(', ')}`)
         .join('; ')
@@ -53,7 +53,7 @@ function formatProfile(answers) {
     `Equipment: ${(answers.equipment || []).join(', ') || 'none'}`,
     `Can swim continuously: ${CONTINUOUS_DISTANCES[answers.continuous_distance] || 'not specified'}`,
     `Level: ${LEVELS[answers.level] || 'not specified'}`,
-    `Strokes & distances: ${strokes}`,
+    `Focus events: ${events}`,
     `Recent times: ${timesText}`,
   ]
     .filter(Boolean)

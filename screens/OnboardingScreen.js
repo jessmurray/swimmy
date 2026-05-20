@@ -139,10 +139,10 @@ const STEPS = [
     ],
   },
   {
-    id: 'strokes',
-    type: 'strokes_distances',
-    question: 'Which strokes and distances do you swim?',
-    sub: 'Select every distance you want to train.',
+    id: 'events',
+    type: 'events_select',
+    question: 'Which events do you want to focus on?',
+    sub: 'Select all the events you want to train for.',
   },
   {
     id: 'has_times',
@@ -168,6 +168,7 @@ const STROKES = [
   { id: 'backstroke',   label: 'Backstroke',   distances: ['50m','100m','200m'] },
   { id: 'breaststroke', label: 'Breaststroke', distances: ['50m','100m','200m'] },
   { id: 'butterfly',    label: 'Butterfly',    distances: ['50m','100m','200m'] },
+  { id: 'im',           label: 'IM',           distances: ['100m','200m','400m'] },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ function canAdvance(step, answers) {
       return typeof val === 'number';
     case 'multi_select':
       return Array.isArray(val) && val.length > 0;
-    case 'strokes_distances':
+    case 'events_select':
       return val && Object.values(val).some((arr) => arr.length > 0);
     case 'event_times':
       return true;
@@ -406,13 +407,13 @@ function MultiSelectStep({ step, answers, setAnswers }) {
   );
 }
 
-function StrokesDistancesStep({ answers, setAnswers }) {
-  const val = answers.strokes || {};
+function EventsSelectStep({ answers, setAnswers }) {
+  const val = answers.events || {};
 
   const toggle = (strokeId, dist) => {
     const cur = val[strokeId] || [];
     const updated = cur.includes(dist) ? cur.filter((d) => d !== dist) : [...cur, dist];
-    setAnswers((p) => ({ ...p, strokes: { ...p.strokes, [strokeId]: updated } }));
+    setAnswers((p) => ({ ...p, events: { ...p.events, [strokeId]: updated } }));
   };
 
   return (
@@ -448,6 +449,7 @@ function StrokesDistancesStep({ answers, setAnswers }) {
 
 function EventTimesStep({ answers, setAnswers }) {
   const val = answers.event_times || {};
+  const selectedEvents = answers.events || {};
 
   const update = (strokeId, dist, text) =>
     setAnswers((p) => ({
@@ -458,12 +460,19 @@ function EventTimesStep({ answers, setAnswers }) {
       },
     }));
 
+  // Only show strokes/distances the user selected in the events step
+  const rows = STROKES.flatMap((stroke) => {
+    const dists = selectedEvents[stroke.id] || [];
+    return dists.length > 0 ? [{ stroke, dists }] : [];
+  });
+  const toRender = rows.length > 0 ? rows : STROKES.map((s) => ({ stroke: s, dists: s.distances }));
+
   return (
     <View style={styles.timesContainer}>
-      {STROKES.map((stroke) => (
+      {toRender.map(({ stroke, dists }) => (
         <View key={stroke.id} style={styles.timesStrokeBlock}>
           <Text style={styles.timesStrokeLabel}>{stroke.label}</Text>
-          {stroke.distances.map((dist) => (
+          {dists.map((dist) => (
             <View key={dist} style={styles.timeRow}>
               <Text style={styles.timeDistLabel}>{dist}</Text>
               <TextInput
@@ -510,7 +519,7 @@ export default function OnboardingScreen({ onComplete }) {
   const goNext = () => isLast ? onComplete(answers) : setStepIndex((i) => i + 1);
   const goBack = () => stepIndex > 0 && setStepIndex((i) => i - 1);
 
-  const needsScroll = ['single_select', 'multi_select', 'strokes_distances', 'event_times'].includes(currentStep.type);
+  const needsScroll = ['single_select', 'multi_select', 'events_select', 'event_times'].includes(currentStep.type);
 
   const renderStepContent = () => {
     switch (currentStep.type) {
@@ -519,7 +528,7 @@ export default function OnboardingScreen({ onComplete }) {
       case 'event_date':        return <EventDateStep answers={answers} setAnswers={setAnswers} />;
       case 'single_select':     return <SingleSelectStep step={currentStep} answers={answers} setAnswers={setAnswers} />;
       case 'multi_select':      return <MultiSelectStep step={currentStep} answers={answers} setAnswers={setAnswers} />;
-      case 'strokes_distances': return <StrokesDistancesStep answers={answers} setAnswers={setAnswers} />;
+      case 'events_select':     return <EventsSelectStep answers={answers} setAnswers={setAnswers} />;
       case 'event_times':       return <EventTimesStep answers={answers} setAnswers={setAnswers} />;
       default: return null;
     }

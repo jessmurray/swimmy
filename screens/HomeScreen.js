@@ -176,7 +176,7 @@ function GridItem({ item }) {
   );
 }
 
-export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onSignOut }) {
+export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onSignOut }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -185,7 +185,7 @@ export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, o
 
   const gridItems = [
     { id: 'plan',     label: 'Training Plan',       sub: '12-week base',       icon: 'calendar-outline', onPress: onOpenPlan },
-    { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline' },
+    { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline',         onPress: onOpenTimes },
     { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',     icon: 'body-outline' },
     { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline', onPress: onOpenProfile },
   ];

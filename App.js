@@ -8,15 +8,17 @@ import HomeScreen from './screens/HomeScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import TrainingPlanScreen from './screens/TrainingPlanScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import PredictedTimesScreen from './screens/PredictedTimesScreen';
 import { generatePlan } from './services/generatePlan';
 
 const RETURNING_KEY = 'swimmy_returning';
 
 export default function App() {
   const [status, setStatus] = useState('loading_auth');
-  const [user, setUser]     = useState(null);
+  const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
-  const [plan, setPlan]     = useState(null);
+  const [plan, setPlan]       = useState(null);
+  const [planId, setPlanId]   = useState(null);
 
   // ── Auth initialisation ──────────────────────────────────────────────────────
 
@@ -60,7 +62,7 @@ export default function App() {
 
     const { data: planRow, error } = await supabase
       .from('plans')
-      .select('plan_data')
+      .select('id, plan_data')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -75,6 +77,7 @@ export default function App() {
     }
 
     if (planRow?.plan_data) {
+      setPlanId(planRow.id);
       setPlan(planRow.plan_data);
       setProfile({ name: session.user.user_metadata?.first_name ?? '' });
       setStatus('home');
@@ -116,6 +119,19 @@ export default function App() {
     return {};
   };
 
+  // ── Plan update (persists AI-generated predictions back to Supabase) ─────────
+
+  const handlePlanUpdate = async (updatedPlan) => {
+    setPlan(updatedPlan);
+    if (user && planId) {
+      const { error } = await supabase
+        .from('plans')
+        .update({ plan_data: updatedPlan })
+        .eq('id', planId);
+      if (error) console.error('[App] Failed to update plan:', error.message);
+    }
+  };
+
   // ── Sign out ─────────────────────────────────────────────────────────────────
 
   const handleSignOut = () => supabase.auth.signOut();
@@ -126,14 +142,30 @@ export default function App() {
     setStatus('loading');
     try {
       const result = await generatePlan(answers);
-      setPlan(result);
+      // Embed profile snapshot so PredictedTimesScreen can generate
+      // and persist predictions without needing the original answers object
+      const planWithMeta = {
+        ...result,
+        _meta: {
+          events:        answers.events        || {},
+          event_times:   answers.event_times   || {},
+          level:         answers.level,
+          goal:          answers.goal,
+          training_days: answers.training_days,
+          session_length: answers.session_length,
+        },
+      };
+      setPlan(planWithMeta);
       setProfile({ name: answers.name });
 
       if (user) {
-        const { error } = await supabase
+        const { data: newRow, error } = await supabase
           .from('plans')
-          .insert({ user_id: user.id, plan_data: result });
+          .insert({ user_id: user.id, plan_data: planWithMeta })
+          .select('id')
+          .single();
         if (error) console.error('[App] Failed to save plan:', error.message);
+        else if (newRow) setPlanId(newRow.id);
       }
     } catch (e) {
       console.error('[App] generatePlan failed:', e?.message ?? e);
@@ -184,12 +216,23 @@ export default function App() {
     );
   }
 
+  if (status === 'times') {
+    return (
+      <PredictedTimesScreen
+        plan={plan}
+        onBack={() => setStatus('home')}
+        onPlanUpdate={handlePlanUpdate}
+      />
+    );
+  }
+
   return (
     <HomeScreen
       profile={profile}
       plan={plan}
       onOpenPlan={() => setStatus('plan')}
       onOpenProfile={() => setStatus('profile')}
+      onOpenTimes={() => setStatus('times')}
       onSignOut={handleSignOut}
     />
   );
