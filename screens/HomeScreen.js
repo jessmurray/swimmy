@@ -176,7 +176,7 @@ function GridItem({ item }) {
   );
 }
 
-export default function HomeScreen({ profile, plan, onOpenPlan }) {
+export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onSignOut }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -187,7 +187,7 @@ export default function HomeScreen({ profile, plan, onOpenPlan }) {
     { id: 'plan',     label: 'Training Plan',       sub: '12-week base',       icon: 'calendar-outline', onPress: onOpenPlan },
     { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline' },
     { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',     icon: 'body-outline' },
-    { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline' },
+    { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline', onPress: onOpenProfile },
   ];
 
   return (
@@ -203,10 +203,15 @@ export default function HomeScreen({ profile, plan, onOpenPlan }) {
             <Text style={styles.appName}>SWIMMY</Text>
             <Text style={styles.navDate}>{today}</Text>
           </View>
-          <TouchableOpacity style={styles.notifBtn}>
-            <Ionicons name="notifications-outline" size={22} color={C.navy} />
-            <View style={styles.notifDot} />
-          </TouchableOpacity>
+          <View style={styles.navActions}>
+            <TouchableOpacity style={styles.notifBtn}>
+              <Ionicons name="notifications-outline" size={22} color={C.navy} />
+              <View style={styles.notifDot} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut} activeOpacity={0.7}>
+              <Ionicons name="log-out-outline" size={20} color={C.navyAlpha60} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.sectionHeader}>
@@ -239,6 +244,7 @@ const styles = StyleSheet.create({
   },
   appName: { fontSize: 22, fontWeight: '800', color: C.navy, letterSpacing: 4 },
   navDate: { fontSize: 12, color: C.navyAlpha60, marginTop: 2, letterSpacing: 0.3 },
+  navActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   notifBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: C.navyAlpha06, alignItems: 'center', justifyContent: 'center',
@@ -247,6 +253,10 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 8, right: 8,
     width: 8, height: 8, borderRadius: 4,
     backgroundColor: C.accent, borderWidth: 1.5, borderColor: C.bg,
+  },
+  signOutBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.navyAlpha06, alignItems: 'center', justifyContent: 'center',
   },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './lib/supabase';
 import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -6,7 +7,10 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import TrainingPlanScreen from './screens/TrainingPlanScreen';
+import ProfileScreen from './screens/ProfileScreen';
 import { generatePlan } from './services/generatePlan';
+
+const RETURNING_KEY = 'swimmy_returning';
 
 export default function App() {
   const [status, setStatus] = useState('loading_auth');
@@ -17,22 +21,23 @@ export default function App() {
   // ── Auth initialisation ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    // Restore persisted session on app launch
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        loadUserData(session);
-      } else {
-        setStatus('register');
-      }
-    });
-
-    // React to sign-out (token expiry, manual sign-out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+    // INITIAL_SESSION fires after the JWT is fully applied to the client,
+    // so RLS-protected queries made inside loadUserData will have auth headers set.
+    // getSession() returns the token earlier but before the client is ready to use it.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        if (session) {
+          loadUserData(session);
+        } else {
+          AsyncStorage.getItem(RETURNING_KEY).then((returning) =>
+            setStatus(returning ? 'login' : 'register')
+          );
+        }
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setPlan(null);
         setProfile(null);
-        setStatus('register');
+        setStatus('login');
       }
     });
 
@@ -45,42 +50,40 @@ export default function App() {
     setUser(session.user);
     setStatus('loading_auth');
 
-    try {
-      // Ensure a profile row exists — created here so it works whether email
-      // confirmation was instant or delayed.
-      await supabase.from('profiles').upsert({
-        id:         session.user.id,
-        first_name: session.user.user_metadata?.first_name ?? '',
-        last_name:  session.user.user_metadata?.last_name  ?? '',
-        email:      session.user.email ?? '',
-      }, { onConflict: 'id' });
+    // Fire-and-forget — profile sync must not block routing
+    supabase.from('profiles').upsert({
+      id:         session.user.id,
+      first_name: session.user.user_metadata?.first_name ?? '',
+      last_name:  session.user.user_metadata?.last_name  ?? '',
+      email:      session.user.email ?? '',
+    }, { onConflict: 'id' });
 
-      // Fetch the user's most recent training plan
-      const { data: planRow, error } = await supabase
-        .from('plans')
-        .select('plan_data')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    const { data: planRow, error } = await supabase
+      .from('plans')
+      .select('plan_data')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      if (error) throw error;
+    if (error) {
+      // DB unreachable or tables not yet created — show login so the user
+      // can retry. Never drop a logged-in user into onboarding on an error.
+      console.error('[App] loadUserData error:', error.message);
+      setStatus('login');
+      return;
+    }
 
-      if (planRow?.plan_data) {
-        setPlan(planRow.plan_data);
-        setProfile({ name: session.user.user_metadata?.first_name ?? '' });
-        setStatus('home');
-      } else {
-        // New user with no plan — send to onboarding
-        setStatus('onboarding');
-      }
-    } catch (e) {
-      console.error('[App] loadUserData error:', e?.message ?? e);
+    if (planRow?.plan_data) {
+      setPlan(planRow.plan_data);
+      setProfile({ name: session.user.user_metadata?.first_name ?? '' });
+      setStatus('home');
+    } else {
       setStatus('onboarding');
     }
   };
 
-  // ── Auth handlers (returned to screens as callbacks) ─────────────────────────
+  // ── Auth handlers ────────────────────────────────────────────────────────────
 
   const handleRegister = async ({ firstName, lastName, email, password }) => {
     const { data, error } = await supabase.auth.signUp({
@@ -91,9 +94,9 @@ export default function App() {
 
     if (error) return { error: error.message };
 
-    // If Supabase auto-confirmed the email (e.g. confirmations disabled in dashboard),
-    // a session is returned immediately — skip straight to onboarding.
     if (data.session) {
+      // Email confirmations disabled — session returned immediately
+      await AsyncStorage.setItem(RETURNING_KEY, '1');
       setUser(data.user);
       await supabase.from('profiles').upsert({
         id: data.user.id, first_name: firstName, last_name: lastName, email,
@@ -102,16 +105,20 @@ export default function App() {
       return {};
     }
 
-    // Email confirmation required — tell the screen to show the confirm view.
     return { confirmEmail: true };
   };
 
   const handleLogin = async ({ email, password }) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
+    await AsyncStorage.setItem(RETURNING_KEY, '1');
     await loadUserData(data.session);
     return {};
   };
+
+  // ── Sign out ─────────────────────────────────────────────────────────────────
+
+  const handleSignOut = () => supabase.auth.signOut();
 
   // ── Onboarding & plan generation ─────────────────────────────────────────────
 
@@ -119,7 +126,6 @@ export default function App() {
     setStatus('loading');
     try {
       const result = await generatePlan(answers);
-      console.log('[App] Plan generated:', result?.weeks?.length, 'weeks');
       setPlan(result);
       setProfile({ name: answers.name });
 
@@ -167,11 +173,24 @@ export default function App() {
     return <TrainingPlanScreen plan={plan} onBack={() => setStatus('home')} />;
   }
 
+  if (status === 'profile') {
+    return (
+      <ProfileScreen
+        profile={profile}
+        user={user}
+        onSignOut={handleSignOut}
+        onBack={() => setStatus('home')}
+      />
+    );
+  }
+
   return (
     <HomeScreen
       profile={profile}
       plan={plan}
       onOpenPlan={() => setStatus('plan')}
+      onOpenProfile={() => setStatus('profile')}
+      onSignOut={handleSignOut}
     />
   );
 }
