@@ -176,6 +176,18 @@ function GridItem({ item }) {
   );
 }
 
+function getPredictionsSub(plan) {
+  const updatedAt = plan?._meta?.predictions_updated_at;
+  if (updatedAt) {
+    const label = new Date(updatedAt).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+    return `Predictions last updated: ${label}`;
+  }
+  if (plan?._meta?.predictions) return 'Predictions ready';
+  return 'Tap to generate predictions';
+}
+
 export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onSignOut }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -184,8 +196,8 @@ export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, o
   const workout = getTodaysWorkout(plan) || todaysWorkout;
 
   const gridItems = [
-    { id: 'plan',     label: 'Training Plan',       sub: '12-week base',       icon: 'calendar-outline', onPress: onOpenPlan },
-    { id: 'times',   label: 'Predicted Times',      sub: 'CSS · 1500m · 400m', icon: 'timer-outline',         onPress: onOpenTimes },
+    { id: 'plan',   label: 'Training Plan',   sub: '12-week base',         icon: 'calendar-outline',    onPress: onOpenPlan },
+    { id: 'times',  label: 'Predicted Times', sub: getPredictionsSub(plan), icon: 'timer-outline',       onPress: onOpenTimes },
     { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',     icon: 'body-outline' },
     { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline', onPress: onOpenProfile },
   ];

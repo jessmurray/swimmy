@@ -56,7 +56,7 @@ export default function PredictedTimesScreen({ plan, onBack, onPlanUpdate }) {
     try {
       const result = await generatePredictions(metaSnapshot);
       setPredictions(result);
-      onPlanUpdate?.({ ...plan, _meta: { ...metaSnapshot, predictions: result } });
+      onPlanUpdate?.({ ...plan, _meta: { ...metaSnapshot, predictions: result, predictions_updated_at: new Date().toISOString() } });
     } catch (e) {
       console.error('[PredictedTimes] generation failed:', e?.message ?? e);
       if (!silent) {
