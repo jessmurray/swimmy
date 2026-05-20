@@ -33,10 +33,16 @@ const CAT = {
   Sharpen: { bg: '#042C53', text: '#FFFFFF', border: 'rgba(4,44,83,0.5)'     },
 };
 
-// Dot colors per spec: Base=#87CEEB, Build=#F4A535, Sharpen=#042C53
 const DOT_COLOR = { Base: '#87CEEB', Build: '#F4A535', Sharpen: '#042C53' };
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// Normalise any day string the AI might return ("Monday", "monday", "Mon") → "Mon"
+function normalizeDay(d) {
+  if (!d) return '';
+  const abbr = d.slice(0, 3);
+  return abbr.charAt(0).toUpperCase() + abbr.slice(1).toLowerCase();
+}
 const CAL_DAY_HEADERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PILL_W = 44;
@@ -66,7 +72,6 @@ function fmtRange(weekStart) {
   return `${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]}`;
 }
 
-// DAYS[0]=Mon … DAYS[6]=Sun. JS getDay(): 0=Sun, 1=Mon … 6=Sat
 function todayDaysIdx() {
   const d = new Date().getDay();
   return d === 0 ? 6 : d - 1;
@@ -100,7 +105,7 @@ function buildSessionDateMap(weeks) {
     const wStart = new Date(firstMonday);
     wStart.setDate(firstMonday.getDate() + wi * 7);
     (week.sessions || []).forEach((s) => {
-      const di = DAYS.indexOf(s.day);
+      const di = DAYS.indexOf(normalizeDay(s.day));
       if (di < 0) return;
       const d = new Date(wStart);
       d.setDate(wStart.getDate() + di);
@@ -110,12 +115,11 @@ function buildSessionDateMap(weeks) {
   return map;
 }
 
-// Returns rows of day numbers (null = empty cell), Mon-aligned grid
 function buildGrid(year, month) {
   const first = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const startDow = first.getDay(); // 0=Sun
-  const offset = startDow === 0 ? 6 : startDow - 1; // shift to Mon=0
+  const startDow = first.getDay();
+  const offset = startDow === 0 ? 6 : startDow - 1;
 
   const cells = Array(offset).fill(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
@@ -173,7 +177,6 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
     <View style={styles.calendar}>
       <Text style={styles.calMonthTitle}>{MONTHS[month]} {year}</Text>
 
-      {/* Day-of-week header row */}
       <View style={styles.calRow}>
         {CAL_DAY_HEADERS.map((h, i) => (
           <View key={i} style={styles.calCell}>
@@ -182,7 +185,6 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
         ))}
       </View>
 
-      {/* Date rows */}
       {rows.map((row, ri) => (
         <View key={ri} style={styles.calRow}>
           {row.map((day, ci) => {
@@ -203,7 +205,6 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
                 onPress={() => onDayPress({ year, month, day })}
                 activeOpacity={0.6}
               >
-                {/* Date number with circle highlight */}
                 <View style={[
                   styles.calNumWrap,
                   isToday && !isSelected && styles.calNumToday,
@@ -218,13 +219,9 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
                     {day}
                   </Text>
                 </View>
-
-                {/* Session dot — always rendered for consistent cell height */}
                 <View style={[
                   styles.calDot,
-                  category
-                    ? { backgroundColor: DOT_COLOR[category] }
-                    : { opacity: 0 },
+                  category ? { backgroundColor: DOT_COLOR[category] } : { opacity: 0 },
                 ]} />
               </TouchableOpacity>
             );
@@ -235,7 +232,7 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
   );
 }
 
-// ── Session detail (full-screen dark drill-down) ──────────────────────────────
+// ── Session detail ────────────────────────────────────────────────────────────
 
 function SessionDetail({ session, weekNum, onBack }) {
   const category = resolveCategory(session);
@@ -315,31 +312,34 @@ export default function TrainingPlanScreen({ plan, onBack }) {
     return { year: t.getFullYear(), month: t.getMonth(), day: t.getDate() };
   });
 
-  const weekScrollRef  = useRef(null);
-  const scrollViewRef  = useRef(null);
-  const dayListYRef    = useRef(0);
-  const rowYRef        = useRef({});
-  const pendingDayIdx  = useRef(null);
+  const weekScrollRef = useRef(null);
+  const scrollViewRef = useRef(null);
+  const dayListYRef   = useRef(0);
+  const rowYRef       = useRef({});
+  const pendingDayIdx = useRef(null);
 
-  const weeks     = plan?.weeks || [];
-  const weekData  = weeks[weekIdx];
+  const weeks    = plan?.weeks || [];
+  const weekData = weeks[weekIdx];
   const weekStart = getWeekStart(weekIdx);
   const todayIdx  = todayDaysIdx();
 
   const sessionDateMap = useMemo(() => buildSessionDateMap(weeks), [weeks]);
 
-  // Calendar always shows the month containing the selected week's Monday
+  console.log('[TrainingPlanScreen] plan received:', JSON.stringify(plan)?.slice(0, 300));
+  console.log('[TrainingPlanScreen] weeks.length:', weeks.length);
+  console.log('[TrainingPlanScreen] weekData (week 1):', JSON.stringify(weekData)?.slice(0, 300));
+  console.log('[TrainingPlanScreen] sessionForDay("Mon"):', JSON.stringify(weekData?.sessions?.find((s) => normalizeDay(s.day) === 'Mon')));
+  console.log('[TrainingPlanScreen] raw session days:', weekData?.sessions?.map((s) => s.day));
+
   const calYear  = weekStart.getFullYear();
   const calMonth = weekStart.getMonth();
 
-  // Keep week-selector strip scrolled to the active pill
   useEffect(() => {
     if (!weekScrollRef.current) return;
     const x = Math.max(0, weekIdx * (PILL_W + PILL_GAP) - width / 2 + PILL_W / 2);
     weekScrollRef.current.scrollTo({ x, animated: true });
   }, [weekIdx]);
 
-  // Scroll main list to the pending day after state+layout settle
   useEffect(() => {
     if (pendingDayIdx.current === null) return;
     const di = pendingDayIdx.current;
@@ -365,13 +365,13 @@ export default function TrainingPlanScreen({ plan, onBack }) {
     );
   }
 
-  const sessionForDay = (day) => weekData?.sessions?.find((s) => s.day === day) ?? null;
+  const sessionForDay = (day) => weekData?.sessions?.find((s) => normalizeDay(s.day) === day) ?? null;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
 
-      {/* Navbar */}
+      {/* ── Navbar ── */}
       <View style={styles.navbar}>
         <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={C.navy} />
@@ -380,37 +380,44 @@ export default function TrainingPlanScreen({ plan, onBack }) {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Week-selector strip */}
-      <ScrollView
-        ref={weekScrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.weekSelectorContent}
-        style={styles.weekSelectorScroll}
-      >
-        {weeks.map((w, i) => (
-          <TouchableOpacity
-            key={i}
-            activeOpacity={0.7}
-            style={[styles.weekPill, i === weekIdx && styles.weekPillActive]}
-            onPress={() => setWeekIdx(i)}
-          >
-            <Text style={[styles.weekPillText, i === weekIdx && styles.weekPillTextActive]}>
-              W{w.week}
-            </Text>
-            {i === 0 && weekIdx !== 0 && <View style={styles.weekPillCurrentDot} />}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/*
+        ── Week selector ──
+        The horizontal ScrollView is wrapped in a plain View so Yoga can
+        measure its intrinsic height from the pill content. A horizontal
+        ScrollView placed directly in a flex column has no bounded height
+        to measure against and can collapse or expand unpredictably.
+      */}
+      <View style={styles.weekStrip}>
+        <ScrollView
+          ref={weekScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.weekStripContent}
+        >
+          {weeks.map((w, i) => (
+            <TouchableOpacity
+              key={i}
+              activeOpacity={0.7}
+              style={[styles.weekPill, i === weekIdx && styles.weekPillActive]}
+              onPress={() => setWeekIdx(i)}
+            >
+              <Text style={[styles.weekPillText, i === weekIdx && styles.weekPillTextActive]}>
+                W{w.week}
+              </Text>
+              {i === 0 && weekIdx !== 0 && <View style={styles.weekPillCurrentDot} />}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {/* Main scrollable content */}
+      {/* ── Main scroll: calendar → week header → legend → day rows ── */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        automaticallyAdjustContentInsets={false}
       >
-        {/* ── Month calendar ───────────────────────────────────────────── */}
         <MonthCalendar
           year={calYear}
           month={calMonth}
@@ -419,7 +426,6 @@ export default function TrainingPlanScreen({ plan, onBack }) {
           onDayPress={handleCalendarDayPress}
         />
 
-        {/* ── Week header ──────────────────────────────────────────────── */}
         <View style={styles.weekHeader}>
           <View>
             <Text style={styles.weekTitle}>
@@ -431,7 +437,6 @@ export default function TrainingPlanScreen({ plan, onBack }) {
           <Text style={styles.weekDates}>{fmtRange(weekStart)}</Text>
         </View>
 
-        {/* ── Category legend ──────────────────────────────────────────── */}
         <View style={styles.legend}>
           {Object.entries(CAT).map(([name, c]) => (
             <View key={name} style={styles.legendItem}>
@@ -441,12 +446,11 @@ export default function TrainingPlanScreen({ plan, onBack }) {
           ))}
         </View>
 
-        {/* ── Day rows ─────────────────────────────────────────────────── */}
         <View onLayout={(e) => { dayListYRef.current = e.nativeEvent.layout.y; }}>
           {DAYS.map((day, di) => {
-            const session   = sessionForDay(day);
-            const date      = dayDate(weekStart, di);
-            const isToday   = weekIdx === 0 && di === todayIdx;
+            const session  = sessionForDay(day);
+            const date     = dayDate(weekStart, di);
+            const isToday  = weekIdx === 0 && di === todayIdx;
             const isSelected =
               selectedDate &&
               date.getFullYear() === selectedDate.year &&
@@ -532,9 +536,18 @@ const styles = StyleSheet.create({
   },
   navTitle: { fontSize: 13, fontWeight: '800', color: C.navy, letterSpacing: 2 },
 
-  // Week selector
-  weekSelectorScroll: { borderBottomWidth: 1, borderBottomColor: C.navyAlpha08 },
-  weekSelectorContent: { paddingHorizontal: 16, paddingVertical: 10, gap: PILL_GAP },
+  // Week selector — plain View wrapper gives the horizontal ScrollView a
+  // measured height; no flex:1 here so it never expands beyond pill content.
+  weekStrip: {
+    height: 52,
+    borderBottomWidth: 1,
+    borderBottomColor: C.navyAlpha08,
+  },
+  weekStripContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: PILL_GAP,
+  },
   weekPill: {
     width: PILL_W, height: 32, borderRadius: 16,
     backgroundColor: C.navyAlpha06, alignItems: 'center', justifyContent: 'center',
@@ -549,9 +562,9 @@ const styles = StyleSheet.create({
 
   // Main scroll
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 0 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
 
-  // ── Month calendar ─────────────────────────────────────────────────────────
+  // Month calendar
   calendar: {
     backgroundColor: C.white,
     borderRadius: 16,
@@ -566,39 +579,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2, marginBottom: 10,
   },
   calRow: { flexDirection: 'row' },
-  calCell: {
-    flex: 1, alignItems: 'center',
-    paddingVertical: 3, gap: 3,
-  },
-  calDayHeader: {
-    fontSize: 11, fontWeight: '600', color: C.navyAlpha30,
-    marginBottom: 2,
-  },
-  calNumWrap: {
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  calNumToday: {
-    backgroundColor: 'rgba(0,168,232,0.14)',
-  },
-  calNumSelected: {
-    backgroundColor: C.navy,
-  },
-  calNumSelectedToday: {
-    backgroundColor: C.accent,
-  },
-  calNum: {
-    fontSize: 13, fontWeight: '500', color: C.navy,
-  },
-  calNumTextToday: {
-    color: C.accent, fontWeight: '700',
-  },
-  calNumTextSelected: {
-    color: C.white, fontWeight: '700',
-  },
-  calDot: {
-    width: 6, height: 6, borderRadius: 3,
-  },
+  calCell: { flex: 1, alignItems: 'center', paddingVertical: 3, gap: 3 },
+  calDayHeader: { fontSize: 11, fontWeight: '600', color: C.navyAlpha30, marginBottom: 2 },
+  calNumWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  calNumToday: { backgroundColor: 'rgba(0,168,232,0.14)' },
+  calNumSelected: { backgroundColor: C.navy },
+  calNumSelectedToday: { backgroundColor: C.accent },
+  calNum: { fontSize: 13, fontWeight: '500', color: C.navy },
+  calNumTextToday: { color: C.accent, fontWeight: '700' },
+  calNumTextSelected: { color: C.white, fontWeight: '700' },
+  calDot: { width: 6, height: 6, borderRadius: 3 },
 
   // Week header
   weekHeader: {
@@ -666,14 +656,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.navyAlpha06,
   },
   restRowSelected: { backgroundColor: C.navyAlpha12 },
-  restLabel: {
-    fontSize: 13, color: C.navyAlpha30, fontStyle: 'italic', marginLeft: 10,
-  },
+  restLabel: { fontSize: 13, color: C.navyAlpha30, fontStyle: 'italic', marginLeft: 10 },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { fontSize: 15, color: C.navyAlpha60 },
 
-  // ── Session detail ─────────────────────────────────────────────────────────
+  // Session detail
   laneLine: {
     position: 'absolute', left: -10, right: -10,
     height: 1, backgroundColor: '#00A8E8',

@@ -45,11 +45,12 @@ const STEPS = [
     question: "What's your main goal?",
     sub: 'Choose the one that fits best.',
     options: [
-      { label: 'Train for an event, gala or competition', icon: 'trophy-outline' },
-      { label: 'Get faster at a stroke or distance',      icon: 'speedometer-outline' },
-      { label: 'Get back into swimming after a break',    icon: 'refresh-outline' },
-      { label: 'Improve general fitness',                 icon: 'heart-outline' },
-      { label: 'Train for triathlon',                     icon: 'bicycle-outline' },
+      { label: 'Improve general fitness',                      icon: 'heart-outline' },
+      { label: 'Cross-train or complement another sport',      icon: 'barbell-outline' },
+      { label: 'Get back into swimming after a break',         icon: 'refresh-outline' },
+      { label: 'Get faster at a stroke or distance',           icon: 'speedometer-outline' },
+      { label: 'Train for an event, gala or competition',      icon: 'trophy-outline' },
+      { label: 'Train for a triathlon',                        icon: 'bicycle-outline' },
     ],
   },
   {
@@ -57,7 +58,7 @@ const STEPS = [
     type: 'event_date',
     question: 'When is your event?',
     sub: 'Your plan will peak around this date.',
-    conditional: (a) => a.goal === 0 || a.goal === 1,
+    conditional: (a) => a.goal === 4,
   },
   {
     id: 'training_days',

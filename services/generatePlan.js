@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const GOALS = [
-  'Train for an event, gala or competition',
-  'Get faster at a specific stroke or distance',
-  'Get back into swimming after a break',
   'Improve general fitness',
-  'Train for triathlon',
+  'Cross-train or complement another sport',
+  'Get back into swimming after a break',
+  'Get faster at a stroke or distance',
+  'Train for an event, gala or competition',
+  'Train for a triathlon',
 ];
 const TRAINING_DAYS = ['1–2 days per week', '3–4 days per week', '5–7 days per week'];
 const SESSION_LENGTHS = ['15 minutes', '30 minutes', '45 minutes', '60 minutes', '90 minutes', '120+ minutes'];
@@ -138,5 +139,9 @@ export async function generatePlan(answers) {
     .replace(/\s*```\s*$/i, '')
     .trim();
 
-  return JSON.parse(jsonStr);
+  const parsed = JSON.parse(jsonStr);
+  // The model occasionally wraps the response in a top-level key like { "plan": { "weeks": [...] } }
+  if (Array.isArray(parsed.weeks)) return parsed;
+  const nested = Object.values(parsed).find((v) => v && Array.isArray(v.weeks));
+  return nested ?? parsed;
 }
