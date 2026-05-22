@@ -188,7 +188,7 @@ function getPredictionsSub(plan) {
   return 'Tap to generate predictions';
 }
 
-export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onSignOut }) {
+export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onOpenStrength, onSignOut }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -198,7 +198,7 @@ export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, o
   const gridItems = [
     { id: 'plan',   label: 'Training Plan',   sub: '12-week base',         icon: 'calendar-outline',    onPress: onOpenPlan },
     { id: 'times',  label: 'Predicted Times', sub: getPredictionsSub(plan), icon: 'timer-outline',       onPress: onOpenTimes },
-    { id: 'strength',label: 'Strength &\nRecovery', sub: 'Next: Mobility',     icon: 'body-outline' },
+    { id: 'strength', label: 'Strength &\nRecovery', sub: 'Next: Mobility', icon: 'barbell-outline', onPress: onOpenStrength },
     { id: 'profile', label: 'Profile',              sub: profile?.name ?? 'Profile', icon: 'person-circle-outline', onPress: onOpenProfile },
   ];
 

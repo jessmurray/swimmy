@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { buildSRWeeks } from '../utils/srSchedule';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
   SafeAreaView, Dimensions,
@@ -31,9 +32,15 @@ const CAT = {
   Base:    { bg: '#87CEEB', text: '#083347', border: 'rgba(135,206,235,0.7)' },
   Build:   { bg: '#F4A535', text: '#5C3200', border: 'rgba(244,165,53,0.7)'  },
   Sharpen: { bg: '#042C53', text: '#FFFFFF', border: 'rgba(4,44,83,0.5)'     },
+  SR:      { bg: '#7BAF7B', text: '#FFFFFF', border: 'rgba(123,175,123,0.6)' },
 };
 
-const DOT_COLOR = { Base: '#87CEEB', Build: '#F4A535', Sharpen: '#042C53' };
+const SR_LABELS = { strength: 'Strength', mobility: 'Mobility', recovery: 'Recovery' };
+
+const DOT_COLOR = {
+  Base: '#87CEEB', Build: '#F4A535', Sharpen: '#042C53',
+  strength: '#7BAF7B', mobility: '#7BAF7B', recovery: '#7BAF7B',
+};
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -110,6 +117,30 @@ function buildSessionDateMap(weeks) {
       const d = new Date(wStart);
       d.setDate(wStart.getDate() + di);
       map[dateKey(d.getFullYear(), d.getMonth(), d.getDate())] = resolveCategory(s);
+    });
+  });
+  return map;
+}
+
+function buildSRSessionDateMap(srWeeks) {
+  if (!srWeeks?.length) return {};
+  const map = {};
+  const today = new Date();
+  const dow = today.getDay();
+  const toMon = dow === 0 ? -6 : 1 - dow;
+  const firstMonday = new Date(today);
+  firstMonday.setDate(today.getDate() + toMon);
+  firstMonday.setHours(0, 0, 0, 0);
+
+  srWeeks.forEach((week, wi) => {
+    const wStart = new Date(firstMonday);
+    wStart.setDate(firstMonday.getDate() + wi * 7);
+    (week.sessions || []).forEach((s) => {
+      const di = DAYS.indexOf(normalizeDay(s.day));
+      if (di < 0) return;
+      const d = new Date(wStart);
+      d.setDate(wStart.getDate() + di);
+      map[dateKey(d.getFullYear(), d.getMonth(), d.getDate())] = s.sr_category;
     });
   });
   return map;
@@ -323,13 +354,13 @@ export default function TrainingPlanScreen({ plan, onBack }) {
   const weekStart = getWeekStart(weekIdx);
   const todayIdx  = todayDaysIdx();
 
-  const sessionDateMap = useMemo(() => buildSessionDateMap(weeks), [weeks]);
+  const srLibrary = plan?._meta?.sr?.library ?? null;
+  const srWeeks   = useMemo(() => srLibrary ? buildSRWeeks(plan, srLibrary) : [], [srLibrary]);
 
-  console.log('[TrainingPlanScreen] plan received:', JSON.stringify(plan)?.slice(0, 300));
-  console.log('[TrainingPlanScreen] weeks.length:', weeks.length);
-  console.log('[TrainingPlanScreen] weekData (week 1):', JSON.stringify(weekData)?.slice(0, 300));
-  console.log('[TrainingPlanScreen] sessionForDay("Mon"):', JSON.stringify(weekData?.sessions?.find((s) => normalizeDay(s.day) === 'Mon')));
-  console.log('[TrainingPlanScreen] raw session days:', weekData?.sessions?.map((s) => s.day));
+  const sessionDateMap = useMemo(() => ({
+    ...buildSRSessionDateMap(srWeeks),
+    ...buildSessionDateMap(weeks),  // swim takes precedence for dot colour
+  }), [weeks, srWeeks]);
 
   const calYear  = weekStart.getFullYear();
   const calMonth = weekStart.getMonth();
@@ -365,7 +396,8 @@ export default function TrainingPlanScreen({ plan, onBack }) {
     );
   }
 
-  const sessionForDay = (day) => weekData?.sessions?.find((s) => normalizeDay(s.day) === day) ?? null;
+  const sessionForDay   = (day) => weekData?.sessions?.find((s) => normalizeDay(s.day) === day) ?? null;
+  const srSessionForDay = (day) => srWeeks[weekIdx]?.sessions?.find((s) => s.day === day) ?? null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -438,19 +470,26 @@ export default function TrainingPlanScreen({ plan, onBack }) {
         </View>
 
         <View style={styles.legend}>
-          {Object.entries(CAT).map(([name, c]) => (
+          {Object.entries(CAT).filter(([name]) => name !== 'SR').map(([name, c]) => (
             <View key={name} style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: c.bg, borderColor: c.border }]} />
               <Text style={styles.legendLabel}>{name}</Text>
             </View>
           ))}
+          {srLibrary && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: CAT.SR.bg, borderColor: CAT.SR.border }]} />
+              <Text style={styles.legendLabel}>S&R</Text>
+            </View>
+          )}
         </View>
 
         <View onLayout={(e) => { dayListYRef.current = e.nativeEvent.layout.y; }}>
           {DAYS.map((day, di) => {
-            const session  = sessionForDay(day);
-            const date     = dayDate(weekStart, di);
-            const isToday  = weekIdx === 0 && di === todayIdx;
+            const session   = sessionForDay(day);
+            const srSession = srSessionForDay(day);
+            const date      = dayDate(weekStart, di);
+            const isToday   = weekIdx === 0 && di === todayIdx;
             const isSelected =
               selectedDate &&
               date.getFullYear() === selectedDate.year &&
@@ -483,6 +522,34 @@ export default function TrainingPlanScreen({ plan, onBack }) {
                   </View>
                   <Ionicons name="chevron-forward" size={15} color={C.navyAlpha30} />
                 </TouchableOpacity>
+              );
+            }
+
+            if (srSession) {
+              return (
+                <View
+                  key={day}
+                  style={[
+                    styles.sessionCard,
+                    styles.srSessionCard,
+                    isToday    && styles.sessionCardToday,
+                    isSelected && styles.sessionCardSelected,
+                  ]}
+                  onLayout={(e) => { rowYRef.current[di] = e.nativeEvent.layout.y; }}
+                >
+                  <View style={styles.srTodayBar} />
+                  <View style={styles.dateCol}>
+                    <Text style={[styles.dateDay, isToday && { color: '#7BAF7B' }]}>{day}</Text>
+                    <Text style={[styles.dateNum, isToday && { color: '#7BAF7B' }]}>{date.getDate()}</Text>
+                  </View>
+                  <View style={styles.sessionInfo}>
+                    <CategoryTag category="SR" small />
+                    <Text style={styles.sessionTitle} numberOfLines={1}>{srSession.title}</Text>
+                    <Text style={styles.sessionStats}>
+                      {SR_LABELS[srSession.sr_category]}  ·  {srSession.duration}
+                    </Text>
+                  </View>
+                </View>
               );
             }
 
@@ -616,11 +683,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
     overflow: 'hidden',
   },
-  sessionCardToday: { borderColor: C.accent, borderWidth: 1.5 },
+  sessionCardToday:    { borderColor: C.accent, borderWidth: 1.5 },
   sessionCardSelected: { backgroundColor: C.navyAlpha03 },
+  srSessionCard:       { borderColor: 'rgba(123,175,123,0.25)' },
   todayBar: {
     position: 'absolute', top: 0, left: 0, bottom: 0,
     width: 3, backgroundColor: C.accent,
+    borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
+  },
+  srTodayBar: {
+    position: 'absolute', top: 0, left: 0, bottom: 0,
+    width: 3, backgroundColor: '#7BAF7B',
     borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
   },
 

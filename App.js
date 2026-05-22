@@ -9,6 +9,7 @@ import LoadingScreen from './screens/LoadingScreen';
 import TrainingPlanScreen from './screens/TrainingPlanScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import PredictedTimesScreen from './screens/PredictedTimesScreen';
+import StrengthRecoveryScreen from './screens/StrengthRecoveryScreen';
 import { generatePlan } from './services/generatePlan';
 
 const RETURNING_KEY = 'swimmy_returning';
@@ -226,6 +227,16 @@ export default function App() {
     );
   }
 
+  if (status === 'strength') {
+    return (
+      <StrengthRecoveryScreen
+        plan={plan}
+        onBack={() => setStatus('home')}
+        onPlanUpdate={handlePlanUpdate}
+      />
+    );
+  }
+
   return (
     <HomeScreen
       profile={profile}
@@ -233,6 +244,7 @@ export default function App() {
       onOpenPlan={() => setStatus('plan')}
       onOpenProfile={() => setStatus('profile')}
       onOpenTimes={() => setStatus('times')}
+      onOpenStrength={() => setStatus('strength')}
       onSignOut={handleSignOut}
     />
   );
