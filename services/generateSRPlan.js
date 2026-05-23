@@ -36,7 +36,9 @@ Rules:
 - Each workout has exactly 4 sets with a label and detail. detail must be under 55 characters.
 - Focus on swimmer-specific needs: shoulder stability, hip flexor length, ankle mobility, rotational core
 - Strength workouts should use minimal equipment (bodyweight, dumbbells, or resistance bands)
-- Scale intensity and duration to the swimmer's level and available session time`;
+- Scale intensity and duration to the swimmer's level and available session time
+- Do NOT reference specific sports in workout titles — use general titles (e.g. "Lower Body Power" not "Lower Body Power for Cycling")
+- CRITICAL: Recovery workouts are dryland ONLY — absolutely no swimming, pool exercises, or water-based activity of any kind. Recovery content must consist exclusively of: static stretching, foam rolling, massage, breathwork, and relaxation techniques. Never include "easy swim", "cool-down swim", "pool stretching", or any aquatic reference in recovery set details.`;
 
 export async function generateSRPlan(meta) {
   const client = new Anthropic({

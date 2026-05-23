@@ -263,6 +263,90 @@ function MonthCalendar({ year, month, sessionDateMap, selectedDate, onDayPress }
   );
 }
 
+// ── S&R session detail ────────────────────────────────────────────────────────
+
+function SRSessionDetail({ session, weekNum, onBack }) {
+  const catLabel  = SR_LABELS[session.sr_category] ?? session.sr_category;
+  const groupLabel = session.muscle_group ?? session.focus_area ?? session.body_area ?? null;
+
+  return (
+    <LinearGradient
+      colors={['#4A7A4A', '#2D5430', '#1E3B20']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1 }}
+    >
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          style={[styles.laneLine, { top: 60 + i * 28, opacity: 0.05 + i * 0.02, backgroundColor: '#7BAF7B' }]}
+          pointerEvents="none"
+        />
+      ))}
+
+      <SafeAreaView style={{ flex: 1 }}>
+        <StatusBar style="light" />
+
+        <View style={styles.detailNav}>
+          <TouchableOpacity style={styles.detailBackBtn} onPress={onBack} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={20} color={C.w80} />
+          </TouchableOpacity>
+          <Text style={styles.detailNavLabel}>WEEK {weekNum}</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.srDetailCatBadge}>
+            <Text style={styles.srDetailCatText}>{catLabel.toUpperCase()}</Text>
+          </View>
+
+          <Text style={styles.detailTitle}>{session.title}</Text>
+
+          {groupLabel && (
+            <View style={styles.srDetailGroupBadge}>
+              <Text style={styles.srDetailGroupText}>{groupLabel}</Text>
+            </View>
+          )}
+
+          <View style={styles.detailStats}>
+            <View style={styles.detailStatPill}>
+              <Ionicons name="time-outline" size={14} color="#7BAF7B" />
+              <View>
+                <Text style={styles.detailStatVal}>{session.duration}</Text>
+                <Text style={styles.detailStatLbl}>Duration</Text>
+              </View>
+            </View>
+            {session.equipment && (
+              <>
+                <View style={styles.detailStatDiv} />
+                <View style={styles.detailStatPill}>
+                  <Ionicons name="fitness-outline" size={14} color="#7BAF7B" />
+                  <View>
+                    <Text style={styles.detailStatVal}>{session.equipment}</Text>
+                    <Text style={styles.detailStatLbl}>Equipment</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.detailSets}>
+            {(session.sets || []).map((set, i) => (
+              <View key={i} style={styles.detailSetRow}>
+                <View style={styles.srDetailSetDot} />
+                <Text style={styles.detailSetLabel}>{set.label}</Text>
+                <Text style={styles.detailSetDetail} numberOfLines={3}>{set.detail}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
+
 // ── Session detail ────────────────────────────────────────────────────────────
 
 function SessionDetail({ session, weekNum, onBack }) {
@@ -336,8 +420,9 @@ function SessionDetail({ session, weekNum, onBack }) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function TrainingPlanScreen({ plan, onBack }) {
-  const [weekIdx, setWeekIdx] = useState(0);
-  const [openSession, setOpenSession] = useState(null);
+  const [weekIdx, setWeekIdx]           = useState(0);
+  const [openSession, setOpenSession]   = useState(null);
+  const [openSRSession, setOpenSRSession] = useState(null);
   const [selectedDate, setSelectedDate] = useState(() => {
     const t = new Date();
     return { year: t.getFullYear(), month: t.getMonth(), day: t.getDate() };
@@ -389,6 +474,12 @@ export default function TrainingPlanScreen({ plan, onBack }) {
     if (found.weekIdx !== weekIdx) setWeekIdx(found.weekIdx);
     pendingDayIdx.current = found.dayIdx;
   };
+
+  if (openSRSession) {
+    return (
+      <SRSessionDetail session={openSRSession} weekNum={weekIdx + 1} onBack={() => setOpenSRSession(null)} />
+    );
+  }
 
   if (openSession) {
     return (
@@ -496,6 +587,61 @@ export default function TrainingPlanScreen({ plan, onBack }) {
               date.getMonth()    === selectedDate.month &&
               date.getDate()     === selectedDate.day;
 
+            // Swim + S&R on the same day — single combined card, two tappable sections
+            if (session && srSession) {
+              const cat = resolveCategory(session);
+              const catColor = CAT[cat]?.bg ?? C.accent;
+              return (
+                <View
+                  key={day}
+                  style={[
+                    styles.combinedCard,
+                    isToday    && styles.sessionCardToday,
+                    isSelected && styles.sessionCardSelected,
+                  ]}
+                  onLayout={(e) => { rowYRef.current[di] = e.nativeEvent.layout.y; }}
+                >
+                  <View style={[styles.combinedAccentBar, { backgroundColor: catColor }]} />
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    style={styles.combinedSection}
+                    onPress={() => setOpenSession(session)}
+                  >
+                    <View style={styles.dateCol}>
+                      <Text style={[styles.dateDay, isToday && { color: C.accent }]}>{day}</Text>
+                      <Text style={[styles.dateNum, isToday && { color: C.accent }]}>{date.getDate()}</Text>
+                    </View>
+                    <View style={styles.sessionInfo}>
+                      <CategoryTag category={cat} small />
+                      <Text style={styles.sessionTitle} numberOfLines={1}>{session.title}</Text>
+                      <Text style={styles.sessionStats}>{session.distance}  ·  {session.duration}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={15} color={C.navyAlpha30} />
+                  </TouchableOpacity>
+
+                  <View style={styles.combinedDivider} />
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    style={styles.combinedSection}
+                    onPress={() => setOpenSRSession(srSession)}
+                  >
+                    <View style={styles.dateCol} />
+                    <View style={styles.sessionInfo}>
+                      <CategoryTag category="SR" small />
+                      <Text style={styles.sessionTitle} numberOfLines={1}>{srSession.title}</Text>
+                      <Text style={styles.sessionStats}>
+                        {SR_LABELS[srSession.sr_category]}  ·  {srSession.duration}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={15} color={C.navyAlpha30} />
+                  </TouchableOpacity>
+                </View>
+              );
+            }
+
+            // Swim day only
             if (session) {
               const cat = resolveCategory(session);
               return (
@@ -525,16 +671,19 @@ export default function TrainingPlanScreen({ plan, onBack }) {
               );
             }
 
+            // S&R only day (Strength on a standalone rest day)
             if (srSession) {
               return (
-                <View
+                <TouchableOpacity
                   key={day}
+                  activeOpacity={0.75}
                   style={[
                     styles.sessionCard,
                     styles.srSessionCard,
-                    isToday    && styles.sessionCardToday,
+                    isToday    && styles.srSessionCardToday,
                     isSelected && styles.sessionCardSelected,
                   ]}
+                  onPress={() => setOpenSRSession(srSession)}
                   onLayout={(e) => { rowYRef.current[di] = e.nativeEvent.layout.y; }}
                 >
                   <View style={styles.srTodayBar} />
@@ -549,7 +698,8 @@ export default function TrainingPlanScreen({ plan, onBack }) {
                       {SR_LABELS[srSession.sr_category]}  ·  {srSession.duration}
                     </Text>
                   </View>
-                </View>
+                  <Ionicons name="chevron-forward" size={15} color={C.navyAlpha30} />
+                </TouchableOpacity>
               );
             }
 
@@ -686,6 +836,7 @@ const styles = StyleSheet.create({
   sessionCardToday:    { borderColor: C.accent, borderWidth: 1.5 },
   sessionCardSelected: { backgroundColor: C.navyAlpha03 },
   srSessionCard:       { borderColor: 'rgba(123,175,123,0.25)' },
+  srSessionCardToday:  { borderColor: '#7BAF7B', borderWidth: 1.5 },
   todayBar: {
     position: 'absolute', top: 0, left: 0, bottom: 0,
     width: 3, backgroundColor: C.accent,
@@ -695,6 +846,28 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, bottom: 0,
     width: 3, backgroundColor: '#7BAF7B',
     borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
+  },
+
+  // Combined swim + S&R card
+  combinedCard: {
+    backgroundColor: C.white,
+    borderRadius: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: C.navyAlpha08,
+    shadowColor: C.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    overflow: 'hidden',
+  },
+  combinedAccentBar: {
+    position: 'absolute', top: 0, left: 0, bottom: 0, width: 3,
+    borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
+  },
+  combinedSection: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  combinedDivider: {
+    height: 1, backgroundColor: C.navyAlpha08,
+    marginLeft: 70, marginRight: 14,
   },
 
   // Date column
@@ -733,6 +906,28 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { fontSize: 15, color: C.navyAlpha60 },
+
+  // S&R detail badges
+  srDetailCatBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: 'rgba(123,175,123,0.25)',
+    borderWidth: 1, borderColor: 'rgba(123,175,123,0.55)',
+    marginBottom: 12,
+  },
+  srDetailCatText: { fontSize: 11, fontWeight: '700', color: '#8EC08E', letterSpacing: 0.5 },
+  srDetailGroupBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    marginBottom: 22,
+  },
+  srDetailGroupText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.65)', letterSpacing: 0.3 },
+  srDetailSetDot: {
+    width: 5, height: 5, borderRadius: 3,
+    backgroundColor: '#7BAF7B', opacity: 0.85, marginTop: 5,
+  },
 
   // Session detail
   laneLine: {

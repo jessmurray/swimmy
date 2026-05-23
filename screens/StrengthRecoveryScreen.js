@@ -40,6 +40,16 @@ const CAT_DETAILS = {
   recovery: 'Stretching & foam rolling',
 };
 
+function hasPoolContent(lib) {
+  // Substring match — no word boundaries so "swimming" and "swimmer" also trigger.
+  const terms = ['swim', 'pool', 'aqua'];
+  return (lib?.recovery ?? []).some(workout =>
+    (workout.sets ?? []).some(set =>
+      terms.some(t => (set.detail ?? '').toLowerCase().includes(t))
+    )
+  );
+}
+
 function getGroupLabel(workout, category) {
   if (category === 'strength') return workout.muscle_group ?? 'General';
   if (category === 'mobility') return workout.focus_area   ?? 'General';
@@ -195,7 +205,13 @@ export default function StrengthRecoveryScreen({ plan, onBack, onPlanUpdate }) {
   const recommendation = getTodayOrNextSR(srWeeks);
 
   useEffect(() => {
-    if (!library) generateLibrary();
+    if (!library) {
+      generateLibrary();
+    } else if (hasPoolContent(library)) {
+      console.log('[SR] Pool content detected in recovery sessions — clearing cache and regenerating');
+      onPlanUpdate?.({ ...plan, _meta: { ...meta, sr: null } });
+      generateLibrary();
+    }
   }, []);
 
   const generateLibrary = async () => {

@@ -7,60 +7,165 @@ function normalizeDay(d) {
   return abbr.charAt(0).toUpperCase() + abbr.slice(1).toLowerCase();
 }
 
-// Distributes S&R sessions across non-swim days.
-// 4+ available days → 2 strength, 1 mobility, 1 recovery spread evenly.
-// Recovery weeks (4, 8, 12) swap strength sessions for recovery.
-export function buildSRWeeks(plan, library) {
-  const swimDays = new Set(
-    (plan?.weeks?.[0]?.sessions ?? []).map(s => normalizeDay(s.day))
-  );
-  const availDays = ALL_DAYS.filter(d => !swimDays.has(d));
-  if (!availDays.length) return [];
+function resolveSessionCategory(session) {
+  if (session.category && ['Base', 'Build', 'Sharpen'].includes(session.category)) return session.category;
+  const s = (session.intensity || '').toLowerCase();
+  if (s.includes('speed') || s.includes('race') || s.includes('anaerobic')) return 'Sharpen';
+  if (s.includes('threshold') || s.includes('endurance') || s.includes('build')) return 'Build';
+  return 'Base';
+}
 
-  const n = availDays.length;
-  let template;
-  if (n === 1) {
-    template = [{ day: availDays[0], type: 'strength' }];
-  } else if (n === 2) {
-    template = [
-      { day: availDays[0], type: 'strength' },
-      { day: availDays[1], type: 'recovery' },
-    ];
-  } else if (n === 3) {
-    template = [
-      { day: availDays[0], type: 'strength' },
-      { day: availDays[1], type: 'mobility' },
-      { day: availDays[2], type: 'recovery' },
-    ];
-  } else {
-    const step = Math.max(1, Math.floor(n / 4));
-    template = [
-      { day: availDays[0],                          type: 'strength' },
-      { day: availDays[Math.min(step, n - 1)],      type: 'strength' },
-      { day: availDays[Math.min(step * 2, n - 1)],  type: 'mobility' },
-      { day: availDays[n - 1],                       type: 'recovery' },
-    ];
+function isSafeForStrength(day, swimMap) {
+  const idx = ALL_DAYS.indexOf(day);
+  if (idx < 0 || swimMap[day]) return false; // must be a non-swim day
+  const prevCat = idx > 0 ? swimMap[ALL_DAYS[idx - 1]] : null;
+  const nextCat = idx < 6 ? swimMap[ALL_DAYS[idx + 1]] : null;
+  if (prevCat === 'Sharpen' || nextCat === 'Sharpen') return false;
+  if (prevCat && nextCat) return false; // sandwiched between any two swim days
+  return true;
+}
+
+function isAdjacentToSharpen(day, swimMap) {
+  const idx = ALL_DAYS.indexOf(day);
+  if (idx < 0) return true;
+  const prevCat = idx > 0 ? swimMap[ALL_DAYS[idx - 1]] : null;
+  const nextCat = idx < 6 ? swimMap[ALL_DAYS[idx + 1]] : null;
+  return prevCat === 'Sharpen' || nextCat === 'Sharpen';
+}
+
+function swimMapForWeek(sessions) {
+  return Object.fromEntries(
+    (sessions || []).map(s => [normalizeDay(s.day), resolveSessionCategory(s)])
+  );
+}
+
+// Build the S&R assignment list for a single week.
+// Returns [{ day, type }] — day may be a swim day (Recovery/Mobility post-swim).
+function scheduleWeek(swimMap, isRecoveryWeek) {
+  const swimDays    = ALL_DAYS.filter(d =>  swimMap[d]);
+  const nonSwimDays = ALL_DAYS.filter(d => !swimMap[d]);
+  const sharpenDays = swimDays.filter(d => swimMap[d] === 'Sharpen');
+  const buildDays   = swimDays.filter(d => swimMap[d] === 'Build');
+  const baseDays    = swimDays.filter(d => swimMap[d] === 'Base');
+  const isHeavyWeek = sharpenDays.length >= 2;
+
+  const usedDays   = new Set();
+  const assignments = [];
+
+  function assign(day, type) {
+    if (!day || usedDays.has(day)) return;
+    assignments.push({ day, type });
+    usedDays.add(day);
   }
+
+  function firstUnused(candidates) {
+    return candidates.find(d => !usedDays.has(d)) ?? null;
+  }
+
+  // Assigns up to `max` strength sessions from `candidates`, skipping days
+  // already used or directly adjacent to an already-assigned strength day.
+  // Returns the number actually assigned.
+  function assignStrength(candidates, max) {
+    let count = 0;
+    for (const d of candidates) {
+      if (count >= max) break;
+      if (usedDays.has(d)) continue;
+      const dIdx = ALL_DAYS.indexOf(d);
+      const adjacentToStrength = assignments.some(
+        a => a.type === 'strength' && Math.abs(ALL_DAYS.indexOf(a.day) - dIdx) === 1
+      );
+      if (!adjacentToStrength) {
+        assign(d, 'strength');
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // Tiered strength candidates (each tier relaxes one constraint):
+  //   1. Strict: not adjacent to Sharpen AND not sandwiched between swim days
+  //   2. Relaxed: not adjacent to Sharpen (drops sandwiching check)
+  //   3. Last resort: any non-swim day
+  function strengthCandidates() {
+    const strict   = nonSwimDays.filter(d => isSafeForStrength(d, swimMap));
+    if (strict.length) return strict;
+    const relaxed = nonSwimDays.filter(d => !isAdjacentToSharpen(d, swimMap));
+    if (relaxed.length) return relaxed;
+    return nonSwimDays;
+  }
+
+  // ── Recovery week (weeks 4 / 8 / 12): light load + 1 strength ─────────────
+  if (isRecoveryWeek) {
+    assign(firstUnused([...baseDays, ...nonSwimDays]), 'mobility');
+    assign(firstUnused([...sharpenDays, ...buildDays, ...nonSwimDays]), 'recovery');
+    assignStrength(strengthCandidates(), 1);
+    return assignments;
+  }
+
+  // ── Normal week ─────────────────────────────────────────────────────────────
+
+  // Recovery: post-swim on hard days (biggest benefit).
+  assign(firstUnused([...sharpenDays, ...buildDays, ...nonSwimDays]), 'recovery');
+
+  // For heavy weeks (2+ Sharpen), add a second recovery on the other hard day.
+  if (isHeavyWeek) {
+    assign(firstUnused([...sharpenDays, ...buildDays]), 'recovery');
+  }
+
+  // Mobility: best on Base swim days, otherwise a non-Sharpen-adjacent rest day.
+  assign(
+    firstUnused([
+      ...baseDays,
+      ...nonSwimDays.filter(d => !isAdjacentToSharpen(d, swimMap)),
+      ...nonSwimDays,
+    ]),
+    'mobility'
+  );
+
+  // Strength: up to 2 (or 1 on heavy weeks), never consecutive, at least 1 guaranteed.
+  const maxStrength = isHeavyWeek ? 1 : 2;
+  const assigned = assignStrength(strengthCandidates(), maxStrength);
+  if (assigned === 0) assignStrength(nonSwimDays, 1);
+
+  return assignments;
+}
+
+// Build a 12-week S&R schedule, reading each week's actual swim categories
+// so Strength never lands next to Sharpen, and Recovery/Mobility co-locate
+// with the swim sessions they complement.
+export function buildSRWeeks(plan, library) {
+  if (!plan?.weeks?.length) return [];
+
+  const weekSwimMaps = plan.weeks.map(w => swimMapForWeek(w.sessions));
+  const counters = { strength: 0, mobility: 0, recovery: 0 };
 
   return Array.from({ length: 12 }, (_, wi) => {
     const isRecoveryWeek = wi === 3 || wi === 7 || wi === 11;
-    const sessions = template.map(({ day, type }) => {
-      const effectiveType = isRecoveryWeek && type === 'strength' ? 'recovery' : type;
-      const lib = library[effectiveType] ?? [];
-      if (!lib.length) return null;
-      return { ...lib[wi % lib.length], day, sr_category: effectiveType };
-    }).filter(Boolean);
+    const swimMap    = weekSwimMaps[wi] ?? weekSwimMaps[0] ?? {};
+    const assignments = scheduleWeek(swimMap, isRecoveryWeek);
+
+    const sessions = assignments
+      .map(({ day, type }) => {
+        const lib = library[type] ?? [];
+        if (!lib.length) return null;
+        const workout = lib[counters[type] % lib.length];
+        counters[type]++;
+        return { ...workout, day, sr_category: type };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (DAY_TO_IDX[a.day] ?? 7) - (DAY_TO_IDX[b.day] ?? 7));
+
     return { week: wi + 1, sessions };
   });
 }
 
-// Returns today's session or the next upcoming one, with a 'whenLabel'.
+// Returns today's S&R session or the next upcoming one, with a whenLabel.
 export function getTodayOrNextSR(srWeeks) {
   if (!srWeeks?.length) return null;
-  const dow = new Date().getDay(); // 0=Sun … 6=Sat
-  const todayIdx = dow === 0 ? 6 : dow - 1; // Mon=0 … Sun=6
+  const dow       = new Date().getDay();
+  const todayIdx  = dow === 0 ? 6 : dow - 1;
   const todayAbbr = ALL_DAYS[todayIdx];
-  const thisWeek = srWeeks[0]?.sessions ?? [];
+  const thisWeek  = srWeeks[0]?.sessions ?? [];
 
   const todaySess = thisWeek.find(s => s.day === todayAbbr);
   if (todaySess) return { ...todaySess, whenLabel: 'Today' };
