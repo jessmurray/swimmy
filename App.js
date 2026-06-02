@@ -10,16 +10,18 @@ import TrainingPlanScreen from './screens/TrainingPlanScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import PredictedTimesScreen from './screens/PredictedTimesScreen';
 import StrengthRecoveryScreen from './screens/StrengthRecoveryScreen';
+import WorkoutScreen from './screens/WorkoutScreen';
 import { generatePlan } from './services/generatePlan';
 
 const RETURNING_KEY = 'swimmy_returning';
 
 export default function App() {
-  const [status, setStatus] = useState('loading_auth');
-  const [user, setUser]       = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [plan, setPlan]       = useState(null);
-  const [planId, setPlanId]   = useState(null);
+  const [status, setStatus]           = useState('loading_auth');
+  const [user, setUser]               = useState(null);
+  const [profile, setProfile]         = useState(null);
+  const [plan, setPlan]               = useState(null);
+  const [planId, setPlanId]           = useState(null);
+  const [activeWorkout, setActiveWorkout] = useState(null);
 
   // ── Auth initialisation ──────────────────────────────────────────────────────
 
@@ -237,6 +239,16 @@ export default function App() {
     );
   }
 
+  if (status === 'workout') {
+    return (
+      <WorkoutScreen
+        workout={activeWorkout}
+        user={user}
+        onBack={() => { setActiveWorkout(null); setStatus('home'); }}
+      />
+    );
+  }
+
   return (
     <HomeScreen
       profile={profile}
@@ -245,6 +257,7 @@ export default function App() {
       onOpenProfile={() => setStatus('profile')}
       onOpenTimes={() => setStatus('times')}
       onOpenStrength={() => setStatus('strength')}
+      onStartWorkout={(workout) => { setActiveWorkout(workout); setStatus('workout'); }}
       onSignOut={handleSignOut}
     />
   );

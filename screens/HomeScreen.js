@@ -102,7 +102,7 @@ function StatPill({ icon, value, label }) {
   );
 }
 
-function WorkoutCard({ workout }) {
+function WorkoutCard({ workout, onStart }) {
   return (
     <TouchableOpacity activeOpacity={0.9} style={styles.workoutCardWrapper}>
       <LinearGradient
@@ -142,7 +142,7 @@ function WorkoutCard({ workout }) {
           ))}
         </View>
 
-        <TouchableOpacity activeOpacity={0.85} style={styles.startBtn}>
+        <TouchableOpacity activeOpacity={0.85} style={styles.startBtn} onPress={() => onStart?.(workout)}>
           <LinearGradient
             colors={[C.accent, C.accentGlow]}
             start={{ x: 0, y: 0 }}
@@ -188,7 +188,7 @@ function getPredictionsSub(plan) {
   return 'Tap to generate predictions';
 }
 
-export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onOpenStrength, onSignOut }) {
+export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, onOpenTimes, onOpenStrength, onStartWorkout, onSignOut }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -231,7 +231,7 @@ export default function HomeScreen({ profile, plan, onOpenPlan, onOpenProfile, o
           <Text style={styles.sectionTitle}>Today's Workout</Text>
         </View>
 
-        <WorkoutCard workout={workout} />
+        <WorkoutCard workout={workout} onStart={onStartWorkout} />
 
         <View style={[styles.grid, { marginTop: 20 }]}>
           {gridItems.map((item) => (

@@ -79,9 +79,9 @@ Required structure:
           "distance": "2000m",
           "duration": "40 min",
           "sets": [
-            { "label": "Warm-up",   "detail": "400m easy FR" },
-            { "label": "Pre-set",   "detail": "4×50m kick @2:00" },
-            { "label": "Main set",  "detail": "8×100m @ CSS+5s :20 rest" },
+            { "label": "Warm-up",   "detail": "400m easy FR · 30s rest" },
+            { "label": "Pre-set",   "detail": "4×50m kick on 2:00" },
+            { "label": "Main set",  "detail": "8×100m @ CSS on 1:40" },
             { "label": "Cool-down", "detail": "200m easy choice" }
           ]
         }
@@ -97,8 +97,10 @@ Rules:
   - "Base": aerobic base building, recovery, and technique-focused sessions
   - "Build": threshold, endurance, stroke-specific, kick/pull, and drill sessions
   - "Sharpen": speed, anaerobic capacity, and race-pace sessions
-- Use proper swimming notation: e.g. "6×100m @ 1:45, :20 rest" or "4×50m FR kick @2:00".
-- Keep each "detail" string under 55 characters.
+- Use proper swimming notation: e.g. "6×100m @ CSS on 1:45" or "4×50m kick on 2:00".
+- Interval sets (reps): use turnaround notation "on M:SS" (e.g. "8×100m @ CSS on 1:40").
+- Non-interval segments (Warm-up, Cool-down, standalone distances): MUST include a rest interval using "· Xs rest" for < 60 s (e.g. "400m easy FR · 30s rest") or "· M:SS rest" for ≥ 60 s. Use 10–20 s for drills, 20–30 s for easy, 30–60 s for moderate. Omit rest on the final Cool-down segment.
+- Keep each "detail" string under 65 characters.
 - Progress volume and intensity across 12 weeks; weeks 4, 8, and 12 are recovery weeks.
 - Always include Warm-up and Cool-down sets.
 - Scale distances to fit within the stated session length.`;
