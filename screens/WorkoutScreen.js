@@ -1,12 +1,12 @@
 import { useReducer, useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import {
   StyleSheet, Text, View, Pressable, TouchableOpacity,
-  SafeAreaView, ScrollView, Dimensions,
+  SafeAreaView, Dimensions,
 } from 'react-native';
+import SessionReviewScreen from './SessionReviewScreen';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
-import { supabase } from '../lib/supabase';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -122,25 +122,28 @@ function buildSteps(workout) {
 //         any active phase → paused → resume
 
 const INIT = {
-  phase:          'pre_start',
-  countdownVal:   3,
-  introCountdown: 10,
-  stepIdx:        0,
-  repIdx:         0,
-  elapsed:        0,
-  countdown:      0,
-  restRemaining:  0,
-  pausedPhase:    null,
-  totalElapsed:   0,
-  setsCompleted:  0,
+  phase:           'pre_start',
+  countdownVal:    3,
+  introCountdown:  10,
+  stepIdx:         0,
+  repIdx:          0,
+  elapsed:         0,
+  countdown:       0,
+  restRemaining:   0,
+  pausedPhase:     null,
+  totalElapsed:    0,
+  setsCompleted:   0,
+  intervalAdjust:  0,
+  restAdjust:      0,
 };
 
 function gotoStep(idx, state, steps) {
   if (idx >= steps.length) return { ...state, phase: 'complete', stepIdx: idx };
   const s = steps[idx];
-  if (s.showIntro) return { ...state, phase: 'set_intro', stepIdx: idx, introCountdown: 10, repIdx: 0 };
-  if (s.type === 'turnaround') return { ...state, phase: 'active', stepIdx: idx, repIdx: 0, countdown: s.intervalSeconds, elapsed: 0 };
-  return { ...state, phase: 'active', stepIdx: idx, repIdx: 0, elapsed: 0, countdown: 0 };
+  const resetAdj = { intervalAdjust: 0, restAdjust: 0 };
+  if (s.showIntro) return { ...state, ...resetAdj, phase: 'set_intro', stepIdx: idx, introCountdown: 10, repIdx: 0 };
+  if (s.type === 'turnaround') return { ...state, ...resetAdj, phase: 'active', stepIdx: idx, repIdx: 0, countdown: s.intervalSeconds, elapsed: 0 };
+  return { ...state, ...resetAdj, phase: 'active', stepIdx: idx, repIdx: 0, elapsed: 0, countdown: 0 };
 }
 
 function nextStep(state, steps) {
@@ -179,7 +182,7 @@ function workoutReducer(state, action) {
           if (state.countdown <= 1) {
             const nr = state.repIdx + 1;
             if (nr >= step.reps) return { ...state, phase: 'tap_confirm', repIdx: nr, totalElapsed: t };
-            return { ...state, repIdx: nr, countdown: step.intervalSeconds, totalElapsed: t };
+            return { ...state, repIdx: nr, countdown: step.intervalSeconds + state.intervalAdjust, totalElapsed: t };
           }
           return { ...state, countdown: state.countdown - 1, totalElapsed: t };
         }
@@ -199,13 +202,13 @@ function workoutReducer(state, action) {
     case 'TAP_ACTIVE':
       if (state.phase !== 'active' || step?.type !== 'stopwatch') return state;
       return step.restSeconds > 0
-        ? { ...state, phase: 'rest', restRemaining: step.restSeconds }
+        ? { ...state, phase: 'rest', restRemaining: step.restSeconds + state.restAdjust }
         : nextStep(state, steps);
 
     case 'TAP_CONFIRM':
       if (state.phase !== 'tap_confirm') return state;
       return step?.restSeconds > 0
-        ? { ...state, phase: 'rest', restRemaining: step.restSeconds, repIdx: 0 }
+        ? { ...state, phase: 'rest', restRemaining: step.restSeconds + state.restAdjust, repIdx: 0 }
         : nextStep(state, steps);
 
     case 'PAUSE': {
@@ -220,7 +223,7 @@ function workoutReducer(state, action) {
       const nr = state.repIdx + 1;
       return nr >= step.reps
         ? { ...state, phase: 'tap_confirm', repIdx: nr }
-        : { ...state, repIdx: nr, countdown: step.intervalSeconds };
+        : { ...state, repIdx: nr, countdown: step.intervalSeconds + state.intervalAdjust };
     }
 
     case 'SKIP_REST':
@@ -231,11 +234,46 @@ function workoutReducer(state, action) {
       return ok.includes(state.phase) ? nextStep(state, steps) : state;
     }
 
+    case 'ADJUST_INTERVAL': {
+      if (state.phase !== 'active') return state;
+      const base = step?.intervalSeconds ?? 5;
+      const newAdj = Math.max(5 - base, state.intervalAdjust + action.delta);
+      const diff = newAdj - state.intervalAdjust;
+      return { ...state, intervalAdjust: newAdj, countdown: Math.max(1, state.countdown + diff) };
+    }
+
+    case 'ADJUST_REST': {
+      if (state.phase !== 'rest') return state;
+      const base = step?.restSeconds ?? 5;
+      const newAdj = Math.max(5 - base, state.restAdjust + action.delta);
+      const diff = newAdj - state.restAdjust;
+      return { ...state, restAdjust: newAdj, restRemaining: Math.max(1, state.restRemaining + diff) };
+    }
+
     default: return state;
   }
 }
 
+function fmtAdjust(secs) {
+  if (secs === 0) return '+0s';
+  return secs > 0 ? `+${secs}s` : `${secs}s`;
+}
+
 // ── Sub-views ─────────────────────────────────────────────────────────────────
+
+function ModifyRow({ adjust, onMinus, onPlus }) {
+  return (
+    <View style={sv.modifyRow}>
+      <TouchableOpacity style={sv.modifyBtn} onPress={onMinus} activeOpacity={0.7} hitSlop={10}>
+        <Text style={sv.modifyBtnText}>−</Text>
+      </TouchableOpacity>
+      <Text style={sv.modifyAdjust}>{fmtAdjust(adjust)}</Text>
+      <TouchableOpacity style={sv.modifyBtn} onPress={onPlus} activeOpacity={0.7} hitSlop={10}>
+        <Text style={sv.modifyBtnText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 function PreStartView({ workout }) {
   const warmupSegments = [];
@@ -298,12 +336,13 @@ function StopwatchView({ step, elapsed }) {
   );
 }
 
-function TurnaroundView({ step, countdown, repIdx }) {
+function TurnaroundView({ step, countdown, repIdx, adjust, onMinus, onPlus }) {
   return (
     <View style={sv.center}>
       <Text style={sv.turnaroundHeader} numberOfLines={2}>{step?.description}</Text>
       <Text style={sv.turnaroundTimer}>{fmt(countdown)}</Text>
       <Text style={sv.repCounter}>{repIdx + 1} / {step?.reps}</Text>
+      <ModifyRow adjust={adjust} onMinus={onMinus} onPlus={onPlus} />
     </View>
   );
 }
@@ -322,11 +361,12 @@ function TapConfirmView({ step }) {
   );
 }
 
-function RestView({ remaining, nextStep: ns }) {
+function RestView({ remaining, nextStep: ns, adjust, onMinus, onPlus }) {
   return (
     <View style={sv.center}>
       <Text style={sv.restTag}>REST</Text>
       <Text style={sv.restTimer}>{remaining}</Text>
+      <ModifyRow adjust={adjust} onMinus={onMinus} onPlus={onPlus} />
       {ns && (
         <View style={sv.nextBox}>
           <Text style={sv.nextTag}>NEXT</Text>
@@ -347,83 +387,9 @@ function PausedView() {
   );
 }
 
-// ── Post-workout screen ───────────────────────────────────────────────────────
-
-const FEELINGS = [
-  { id: 'easy',           label: 'Easy',           color: C.sage  },
-  { id: 'as_expected',    label: 'As expected',     color: C.white  },
-  { id: 'hard',           label: 'Hard',            color: C.gold  },
-  { id: 'couldnt_finish', label: "Couldn't finish", color: C.red   },
-];
-
-function StatBox({ icon, value, label }) {
-  return (
-    <View style={styles.statBox}>
-      <Ionicons name={icon} size={20} color={C.white} />
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function CompleteScreen({ state, workout, steps, onSave, onDone, saved, saving }) {
-  return (
-    <View style={styles.screen}>
-      <StatusBar style="light" />
-      <SafeAreaView style={styles.safe}>
-        <ScrollView
-          contentContainerStyle={styles.completeContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.completeBadge}>
-            <Ionicons name="checkmark" size={36} color={C.white} />
-          </View>
-
-          <Text style={styles.completeTitle}>SESSION COMPLETE</Text>
-          <Text style={styles.completeSub}>{workout?.title}</Text>
-
-          <View style={styles.statsRow}>
-            <StatBox icon="time-outline"  value={fmt(state.totalElapsed)}            label="Time"     />
-            <StatBox icon="water-outline" value={workout?.distance ?? '—'}            label="Distance" />
-            <StatBox icon="list-outline"  value={`${state.setsCompleted}/${steps.length}`} label="Sets" />
-          </View>
-
-          {saved ? (
-            <View style={styles.savedRow}>
-              <Ionicons name="checkmark-circle" size={18} color={C.sage} />
-              <Text style={styles.savedText}>Saved to your log</Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.feelingPrompt}>How did it feel?</Text>
-              <View style={styles.feelingGrid}>
-                {FEELINGS.map(f => (
-                  <TouchableOpacity
-                    key={f.id}
-                    style={[styles.feelingBtn, { borderColor: f.color + '60' }]}
-                    onPress={() => onSave(f.id)}
-                    disabled={saving}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.feelingBtnText, { color: f.color }]}>{f.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
-
-          <TouchableOpacity style={styles.doneBtn} onPress={onDone} activeOpacity={0.8}>
-            <Text style={styles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    </View>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function WorkoutScreen({ workout, user, onBack }) {
+export default function WorkoutScreen({ workout, user, plan, onPlanUpdate, onBack }) {
   useKeepAwake();
 
   // Steps are fixed at mount — workout won't change during a session
@@ -436,8 +402,6 @@ export default function WorkoutScreen({ workout, user, onBack }) {
   const holdTmRef = useRef(null);
 
   const [showHoldHint, setShowHoldHint] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [saving, setSaving] = useState(false);
 
   // Tick timer — clear and restart whenever phase changes
   useEffect(() => {
@@ -490,37 +454,18 @@ export default function WorkoutScreen({ workout, user, onBack }) {
     setShowHoldHint(false);
   }, []);
 
-  const saveLog = useCallback(async (feeling) => {
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('workout_logs').insert({
-        user_id:          user?.id,
-        workout_title:    workout?.title,
-        duration_seconds: state.totalElapsed,
-        distance:         workout?.distance,
-        sets_completed:   state.setsCompleted,
-        total_sets:       steps.length,
-        feeling,
-        logged_at:        new Date().toISOString(),
-      });
-      if (error) console.error('[Workout] Save error:', error.message);
-    } catch (e) {
-      console.error('[Workout] Save error:', e?.message ?? e);
-    } finally {
-      setSaved(true);
-      setSaving(false);
-    }
-  }, [state.totalElapsed, state.setsCompleted, steps.length, user, workout]);
-
   const currentStep = steps[state.stepIdx] ?? null;
   const nextStepVal = steps[state.stepIdx + 1] ?? null;
 
   if (state.phase === 'complete') {
     return (
-      <CompleteScreen
-        state={state} workout={workout} steps={steps}
-        onSave={saveLog} onDone={onBack}
-        saved={saved} saving={saving}
+      <SessionReviewScreen
+        workout={workout}
+        totalElapsed={state.totalElapsed}
+        user={user}
+        plan={plan}
+        onPlanUpdate={onPlanUpdate}
+        onDone={onBack}
       />
     );
   }
@@ -562,10 +507,21 @@ export default function WorkoutScreen({ workout, user, onBack }) {
           {state.phase === 'active' && currentStep?.type === 'stopwatch'   &&
             <StopwatchView step={currentStep} elapsed={state.elapsed} />}
           {state.phase === 'active' && currentStep?.type === 'turnaround'  &&
-            <TurnaroundView step={currentStep} countdown={state.countdown} repIdx={state.repIdx} />}
+            <TurnaroundView
+              step={currentStep} countdown={state.countdown} repIdx={state.repIdx}
+              adjust={state.intervalAdjust}
+              onMinus={() => dispatch({ type: 'ADJUST_INTERVAL', delta: -5, steps })}
+              onPlus={() =>  dispatch({ type: 'ADJUST_INTERVAL', delta:  5, steps })}
+            />}
 
           {state.phase === 'tap_confirm' && <TapConfirmView step={currentStep} />}
-          {state.phase === 'rest'        && <RestView remaining={state.restRemaining} nextStep={nextStepVal} />}
+          {state.phase === 'rest' &&
+            <RestView
+              remaining={state.restRemaining} nextStep={nextStepVal}
+              adjust={state.restAdjust}
+              onMinus={() => dispatch({ type: 'ADJUST_REST', delta: -5, steps })}
+              onPlus={() =>  dispatch({ type: 'ADJUST_REST', delta:  5, steps })}
+            />}
           {state.phase === 'paused'      && <PausedView />}
 
           {/* Hold-to-pause progress hint */}
@@ -629,41 +585,6 @@ const styles = StyleSheet.create({
   bottomHint: { fontSize: 11, color: C.w30, letterSpacing: 0.3 },
   bottomDot:  { width: 3, height: 3, borderRadius: 2, backgroundColor: C.w20 },
 
-  // Complete screen
-  completeContent: { paddingHorizontal: 24, paddingTop: 52, paddingBottom: 48, alignItems: 'center' },
-  completeBadge: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-  },
-  completeTitle: { fontSize: 24, fontWeight: '800', color: C.white, letterSpacing: 2.5 },
-  completeSub:   { fontSize: 13, color: C.w40, marginTop: 6, marginBottom: 32 },
-
-  statsRow:  { flexDirection: 'row', gap: 10, width: '100%', marginBottom: 40 },
-  statBox: {
-    flex: 1, alignItems: 'center', paddingVertical: 18, gap: 6,
-    borderRadius: 14, backgroundColor: C.w06, borderWidth: 1, borderColor: C.w10,
-  },
-  statValue: { fontSize: 20, fontWeight: '800', color: C.white },
-  statLabel: { fontSize: 10, color: C.w40, textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  feelingPrompt: { fontSize: 14, color: C.w60, marginBottom: 16 },
-  feelingGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%', justifyContent: 'center' },
-  feelingBtn: {
-    width: (SW - 68) / 2, paddingVertical: 14,
-    borderRadius: 12, borderWidth: 1, backgroundColor: C.w06, alignItems: 'center',
-  },
-  feelingBtnText: { fontSize: 13, fontWeight: '700' },
-
-  savedRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  savedText: { fontSize: 14, color: C.sage, fontWeight: '600' },
-
-  doneBtn: {
-    marginTop: 28, width: '100%', paddingVertical: 15, borderRadius: 14,
-    borderWidth: 1, borderColor: C.w20, backgroundColor: C.w06, alignItems: 'center',
-  },
-  doneBtnText: { fontSize: 16, fontWeight: '700', color: C.w80 },
 });
 
 const sv = StyleSheet.create({
@@ -716,6 +637,16 @@ const sv = StyleSheet.create({
   // Paused
   pausedTitle: { fontSize: 24, fontWeight: '800', color: C.white, letterSpacing: 3, marginTop: 18, marginBottom: 10 },
   pausedSub:   { fontSize: 13, color: C.w40 },
+
+  // Modify row (turnaround + rest)
+  modifyRow:    { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 22 },
+  modifyBtn:    {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(0,168,232,0.22)', borderWidth: 1, borderColor: 'rgba(0,168,232,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modifyBtnText:  { fontSize: 20, fontWeight: '400', color: C.white, lineHeight: 24 },
+  modifyAdjust:   { fontSize: 13, fontWeight: '600', color: C.w60, width: 44, textAlign: 'center', letterSpacing: 0.3 },
 
   // Warm-up preview on pre-start screen
   warmupPreview:      { marginTop: 40, width: '100%', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.w20, paddingTop: 24 },

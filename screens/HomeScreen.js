@@ -71,12 +71,13 @@ function getTodaysWorkout(plan) {
   if (!session) session = sessions[0];
 
   return {
-    title: session.title,
-    subtitle: `${session.day} · Week 1`,
-    duration: session.duration,
-    distance: session.distance,
-    intensity: session.intensity,
-    sets: session.sets,
+    title:      session.title,
+    subtitle:   `${session.day} · Week ${plan.weeks[0].week ?? 1}`,
+    duration:   session.duration,
+    distance:   session.distance,
+    intensity:  session.intensity,
+    sets:       session.sets,
+    weekNumber: plan.weeks[0].week ?? 1,
   };
 }
 

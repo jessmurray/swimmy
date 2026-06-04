@@ -244,6 +244,8 @@ export default function App() {
       <WorkoutScreen
         workout={activeWorkout}
         user={user}
+        plan={plan}
+        onPlanUpdate={handlePlanUpdate}
         onBack={() => { setActiveWorkout(null); setStatus('home'); }}
       />
     );
