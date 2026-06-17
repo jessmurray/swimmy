@@ -213,6 +213,8 @@ export default function App() {
       <ProfileScreen
         profile={profile}
         user={user}
+        plan={plan}
+        onPlanUpdate={handlePlanUpdate}
         onSignOut={handleSignOut}
         onBack={() => setStatus('home')}
       />
