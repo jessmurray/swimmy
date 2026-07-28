@@ -295,24 +295,25 @@ export default function SessionReviewScreen({ workout, totalElapsed, user, plan,
     // Save session record
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      console.log('[Review] user prop id:', user?.id);
-      console.log('[Review] supabase session uid:', sessionData?.session?.user?.id ?? 'NO SESSION');
-      console.log('[Review] access token present:', !!sessionData?.session?.access_token);
+      const authUserId = sessionData?.session?.user?.id;
 
-      const insertPayload = {
-        user_id:             user?.id,
-        date:                new Date().toISOString(),
-        session_title:       workout?.title,
-        week_number:         workout?.weekNumber ?? 1,
-        distance:            parseInt((workout?.distance ?? '0').replace(/[^0-9]/g, ''), 10) || null,
-        duration_seconds:    totalElapsed,
-        feeling,
-        feedback_reasons:    reasonsList,
-        rearrange_requested: recovery ?? false,
-      };
-      console.log('[Review] Inserting into completed_sessions:', JSON.stringify(insertPayload, null, 2));
-      const { error } = await supabase.from('completed_sessions').insert(insertPayload);
-      console.log('[Review] Insert error:', JSON.stringify(error, null, 2));
+      if (!authUserId) {
+        console.error('[Review] No active session — skipping insert');
+      } else {
+        const insertPayload = {
+          user_id:             authUserId,
+          date:                new Date().toISOString(),
+          session_title:       workout?.title,
+          week_number:         workout?.weekNumber ?? 1,
+          distance:            parseInt((workout?.distance ?? '0').replace(/[^0-9]/g, ''), 10) || null,
+          duration_seconds:    totalElapsed,
+          feeling,
+          feedback_reasons:    reasonsList,
+          rearrange_requested: recovery ?? false,
+        };
+        const { error } = await supabase.from('completed_sessions').insert(insertPayload);
+        if (error) console.error('[Review] Insert error:', JSON.stringify(error, null, 2));
+      }
     } catch (e) {
       console.error('[Review] Save error:', e?.message ?? e);
     }
