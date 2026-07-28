@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { adjustPlan } from '../services/adjustPlan';
+import { rearrangePlan } from '../services/rearrangePlan';
 
 const { width } = Dimensions.get('window');
 const CARD_W = (width - 52) / 2; // 20px padding each side + 12px gap
@@ -230,7 +231,7 @@ function SummaryStep({ workout, totalElapsed, feeling, planChanged, onDone }) {
         {planChanged ? (
           <View style={s.planBanner}>
             <Ionicons name="sparkles-outline" size={18} color={C.accent} />
-            <Text style={s.planBannerText}>Your plan has been updated for the next two weeks based on your feedback</Text>
+            <Text style={s.planBannerText}>Your plan has been updated</Text>
           </View>
         ) : (
           <View style={[s.planBanner, s.planBannerNeutral]}>
@@ -278,9 +279,27 @@ export default function SessionReviewScreen({ workout, totalElapsed, user, plan,
     setStep(4);
     const reasonsList = [...reasons];
 
+    // Check for second consecutive recovery trigger BEFORE inserting the current session,
+    // so the query returns the previous session (not this one).
+    let prevHadTrigger = false;
+    if (user?.id) {
+      const { data: prev } = await supabase
+        .from('completed_sessions')
+        .select('feedback_reasons')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(1);
+      prevHadTrigger = prev?.[0]?.feedback_reasons?.some(r => RECOVERY_TRIGGERS.has(r)) ?? false;
+    }
+
     // Save session record
     try {
-      await supabase.from('completed_sessions').insert({
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('[Review] user prop id:', user?.id);
+      console.log('[Review] supabase session uid:', sessionData?.session?.user?.id ?? 'NO SESSION');
+      console.log('[Review] access token present:', !!sessionData?.session?.access_token);
+
+      const insertPayload = {
         user_id:             user?.id,
         date:                new Date().toISOString(),
         session_title:       workout?.title,
@@ -290,29 +309,52 @@ export default function SessionReviewScreen({ workout, totalElapsed, user, plan,
         feeling,
         feedback_reasons:    reasonsList,
         rearrange_requested: recovery ?? false,
-      });
+      };
+      console.log('[Review] Inserting into completed_sessions:', JSON.stringify(insertPayload, null, 2));
+      const { error } = await supabase.from('completed_sessions').insert(insertPayload);
+      console.log('[Review] Insert error:', JSON.stringify(error, null, 2));
     } catch (e) {
       console.error('[Review] Save error:', e?.message ?? e);
     }
 
-    // Adjust plan via Claude for any non-neutral feedback
-    if (feeling !== 'as_expected' && plan) {
+    let currentPlan = plan;
+    let changed     = false;
+
+    // Rearrange current week deterministically for recovery triggers.
+    if (currentPlan) {
+      const rearranged = rearrangePlan(
+        currentPlan, workout, reasonsList, recovery ?? false, prevHadTrigger
+      );
+      if (rearranged) {
+        currentPlan = rearranged;
+        changed     = true;
+      }
+    }
+
+    // Adjust future weeks via Claude for any non-neutral feedback.
+    if (feeling !== 'as_expected' && currentPlan) {
       setProcessingMsg('Adjusting your plan…');
       try {
         const weekIdx = (workout?.weekNumber ?? 1) - 1;
-        const updated = await adjustPlan(plan, weekIdx, {
+        const adjusted = await adjustPlan(currentPlan, weekIdx, {
           sessionTitle:  workout?.title,
           feeling,
           reasons:       reasonsList,
           wantsRecovery: recovery ?? false,
         });
-        if (updated) {
-          await onPlanUpdate(updated);
-          setPlanChanged(true);
+        if (adjusted) {
+          currentPlan = adjusted;
+          changed     = true;
         }
       } catch (e) {
         console.error('[Review] Adjust error:', e?.message ?? e);
       }
+    }
+
+    // Persist all plan changes in one write.
+    if (changed) {
+      await onPlanUpdate(currentPlan);
+      setPlanChanged(true);
     }
 
     setStep(5);

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/jessicamurray/swimmy add .)",
+      "Bash(git -C /Users/jessicamurray/swimmy status)"
+    ]
+  }
+}
